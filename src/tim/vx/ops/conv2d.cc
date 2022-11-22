@@ -23,7 +23,7 @@
 *****************************************************************************/
 #include "tim/vx/ops/conv2d.h"
 
-#include "operation_private.h"
+#include "builtin_op_impl.h"
 #include "type_utils.h"
 #include "vsi_nn_pub.h"
 
@@ -59,7 +59,7 @@ Conv2d::Conv2d(Graph* graph, int32_t weights, PadType padding,
                const std::array<uint32_t, 2>& dilation,
                const std::array<uint32_t, 4>& pad, int32_t multiplier,
                DataLayout input_layout, DataLayout kernel_layout)
-    : Operation(graph, VSI_NN_OP_CONV2D, 0, 0, input_layout),
+    : BuiltinOp(graph, VSI_NN_OP_CONV2D, 0, 0, input_layout),
       weights_(weights),
       padding_(padding),
       ksize_(ksize),
@@ -86,6 +86,14 @@ std::shared_ptr<Operation> Conv2d::Clone(std::shared_ptr<Graph>& graph) const {
       this->weights_, this->padding_, this->ksize_, this->stride_,
       this->dilation_, this->pad_, this->multiplier_, this->impl_->layout_,
       this->kernel_layout_);
+}
+
+const std::vector<std::shared_ptr<Tensor>> Conv2d::ConstantInputsTensor() const {
+   if (this->IsAllInputsConst()) {
+    return {this->impl_->inputs_tensor_[0]};
+  } else {
+    return {};
+  }
 }
 
 }  // namespace ops

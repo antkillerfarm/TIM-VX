@@ -35,7 +35,6 @@
 #include "vsi_nn_error.h"
 #include "utils/vsi_nn_util.h"
 #include "kernel/vsi_nn_kernel.h"
-#include "libnnext/vx_lib_nnext.h"
 
 __BEGIN_DECLS
 
@@ -51,6 +50,7 @@ __BEGIN_DECLS
 
  typedef enum
 {
+    _error = -1,
     _1D = 0,
     _2D,
     _3D
@@ -136,7 +136,7 @@ static vsi_status get_gather_nd_tensor_reshape_size
     vsi_size_t *input_size = inputs[0]->attr.size;
     uint32_t i = 0;
     vsi_size_t elementCnt = 1;
-#define VSI_NN_MAX_IMAGE_WIDTH  (65536)
+#define VSI_NN_MAX_IMAGE_WIDTH  GPU_TENSOR_MAX_WIDTH
 
     newDim[0] = 0;
     for(i = 0; i < dims_num; ++i)
@@ -167,6 +167,10 @@ static vsi_status get_gather_nd_tensor_reshape_size
             newDim[0] = 2;
             sizes[0] = block_size;
             sizes[1] = elementCnt / block_size;
+        }
+        else if(coordDim == 4)
+        {
+            newDim[0] = 3;
         }
 
         status = VSI_SUCCESS;
@@ -208,11 +212,10 @@ DEF_KERNEL_INITIALIZER(_gather_nd_initializer)
     vsi_nn_kernel_tensor_attr_t * attr[3] = { NULL };
     int32_t       block_size  = 0;
     int32_t       indices_num = 1;
-
     int32_t     src0ZP     = 0;
-    float       src0Scale  = 0;
+    float       src0Scale  = 1;
     int32_t     dstZP      = 0;
-    float       dstScale   = 0;
+    float       dstScale   = 1;
 
     uint32_t pack_key = 0;
 
@@ -226,10 +229,6 @@ DEF_KERNEL_INITIALIZER(_gather_nd_initializer)
     status = vsi_nn_kernel_scalar_read_int32((vsi_nn_kernel_scalar_t)param[3], &block_size);
     CHECK_STATUS_FAIL_GOTO(status, OnError );
 
-    src0ZP     = attr[0]->asymm.zero_point;
-    src0Scale  = attr[0]->asymm.scale;
-    dstZP      = attr[2]->asymm.zero_point;
-    dstScale   = attr[2]->asymm.scale;
     if( attr[0]->quant == VSI_NN_KERNEL_QUANT_DFP )
     {
         if (attr[0]->dfp.fl > 0)
@@ -241,9 +240,10 @@ DEF_KERNEL_INITIALIZER(_gather_nd_initializer)
             src0Scale = ((float) ((int64_t)1 << -attr[0]->dfp.fl));
         }
     }
-    else if(attr[0]->quant == VSI_NN_KERNEL_QUANT_NONE)
+    else if ( attr[0]->quant == VSI_NN_KERNEL_QUANT_ASYMM )
     {
-        src0Scale = 1;
+        src0Scale = attr[0]->asymm.scale;
+        src0ZP = attr[0]->asymm.zero_point;
     }
 
     if( attr[2]->quant == VSI_NN_KERNEL_QUANT_DFP )
@@ -256,11 +256,11 @@ DEF_KERNEL_INITIALIZER(_gather_nd_initializer)
         {
             dstScale = (1.0f / (float)((int64_t)1 << -attr[2]->dfp.fl));
         }
-        dstScale = 1.0f / dstScale;
     }
-    else if( attr[2]->quant == VSI_NN_KERNEL_QUANT_NONE )
+    else if ( attr[2]->quant == VSI_NN_KERNEL_QUANT_ASYMM )
     {
-        dstScale = 1;
+        dstScale = 1.0f / attr[2]->asymm.scale;
+        dstZP = attr[2]->asymm.zero_point;
     }
 
     indices_num = (int32_t)(attr[1]->shape->data[1]);
@@ -314,7 +314,7 @@ DEF_KERNEL_INITIALIZER(_gather_nd_initializer)
         case _PACK_SELECT_KEY( I8, F16 ):
         case _PACK_SELECT_KEY( I16, F16 ):
             {
-                gpu_quantize_multiplier_16bit( (double)src0Scale / dstScale, &M0, &postShift);
+                gpu_quantize_multiplier_16bit( (double)src0Scale * dstScale, &M0, &postShift);
                 multAndoutZP0[0] = (uint32_t)(M0);
                 multAndoutZP0[1] = (uint32_t)((dstZP << postShift) - src0ZP * M0);
 
@@ -330,7 +330,7 @@ DEF_KERNEL_INITIALIZER(_gather_nd_initializer)
         case _PACK_SELECT_KEY( F16, I16 ):
             {
                 int32_t  postShift0       = 0;
-                gpu_quantize_multiplier_16bit( (double)src0Scale / dstScale, &M0, &postShift0);
+                gpu_quantize_multiplier_16bit( (double)src0Scale * dstScale, &M0, &postShift0);
 
                 multAndoutZP1[0] = (uint32_t)(M0);
                 multAndoutZP1[1] = (uint32_t)((dstZP << postShift0) - src0ZP * M0);
@@ -381,7 +381,7 @@ static vsi_status _query_kernel
     vsi_status status = VSI_FAILURE;
     vsi_nn_kernel_dtype_e input0_dtype = U8;
     vsi_nn_kernel_dtype_e output_dtype = U8;
-    vsi_nn_kernel_coord_type_e coord_type = _1D;
+    vsi_nn_kernel_coord_type_e coord_type = _error;
     uint32_t key = 0;
     int i = 0;
 
@@ -404,7 +404,7 @@ static vsi_status _query_kernel
     {
         coord_type = _2D;
     }
-    else if(coord_dim == 3)
+    else if(coord_dim == 3 || coord_dim == 4)
     {
         coord_type = _3D;
     }
@@ -497,4 +497,3 @@ static vsi_nn_kernel_node_t _setup
 __END_DECLS
 
 REGISTER_BACKEND_EVIS( gather_nd, _setup )
-

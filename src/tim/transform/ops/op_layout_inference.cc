@@ -24,7 +24,7 @@
 
 #include "op_layout_inference.h"
 #include "permute_vector.h"
-#include "operation_private.h"
+#include "builtin_op_impl.h"
 #include "tim/vx/ops/transpose.h"
 #include "type_utils.h"
 
@@ -40,12 +40,14 @@ void OpLayoutInfer::OnOutputs(
   for (const auto& out : op_outputs) {
     if (graph_outputs.end() !=
         std::find(graph_outputs.begin(), graph_outputs.end(), out)) {
+      context_->UpdateGraphOutputMap(out, context_->GetMapedTensor(out));
       auto pv = context_->GetPermuteVector(out);
       if (!pv->IsAligned()) {
         auto perm_out = InsertPermute(context_->GetMapedTensor(out),
                                       pv->Reverse(), true, out);
         // Update graph out tensor
         context_->UpdateTensorMap(out, perm_out);
+        context_->UpdateGraphOutputMap(out, perm_out);
       }
       if (!context_->src_graph_->GetConsumersOp(out).empty()) {
         // The tensor is output of graph, but it also is the input of other operations
@@ -76,19 +78,20 @@ std::shared_ptr<vx::Tensor> OpLayoutInfer::InsertPermute(
         MapAxis(perm->AsStdVec(), out_spec.quantization_.ChannelDim()));
   }
   auto out_tensor = context_->infer_graph_->CreateTensor(out_spec);
-  auto perm_op =
-      context_->infer_graph_->CreateOperation<vx::ops::Transpose>(perm->AsStdVec());
+  auto perm_op = context_->infer_graph_->CreateOperation<vx::ops::Transpose>(
+      perm->AsStdVec());
   (*perm_op).BindInput(input).BindOutput(out_tensor);
   return out_tensor;
 }
 
 std::vector<std::shared_ptr<vx::Tensor>> OpLayoutInfer::CreateOutputsTensor(
-      std::shared_ptr<IPermuteVector> required_pv) {
+    std::shared_ptr<IPermuteVector> required_pv) {
   std::vector<std::shared_ptr<vx::Tensor>> outputs_tensor;
 
   if (op_->impl()->OutputsTensor().size() > 1) {
     // todo(sven): potential bug here if node have multi-output and require layout inference
-    std::cout <<"warning at "<< __FUNCTION__ << ", #" << __LINE__ << std::endl;
+    std::cout << "warning at " << __FUNCTION__ << ", #" << __LINE__
+              << std::endl;
   }
 
   uint32_t i = 0;
@@ -204,8 +207,8 @@ OpLayoutInfer::AlignPermuteVectorForMutilInputs() {
       std::shared_ptr<vx::Tensor> perm_out;
       if (i_src->IsConstTensor()) {
         required_pv->IsAligned()
-            ? perm_out = context_->infer_graph_->CreateTensor(i_src->GetSpec(),
-                                                              i_src->GetDataRef())
+            ? perm_out = context_->infer_graph_->CreateTensor(
+                  i_src->GetSpec(), i_src->GetDataRef())
             : perm_out = PermuteConstTensor(i_src, required_pv);
       } else {
         auto final_pv =
@@ -263,25 +266,25 @@ OpLayoutInfer::AlignPermuteVectorForElementWise() {
   return required_pv;
 }
 
-
 void OpLayoutInfer::ReverseInputsPermuteVector() {
   for (const auto& i_src : op_->impl()->InputsTensor()) {
     std::shared_ptr<vx::Tensor> perm_out;
     std::shared_ptr<IPermuteVector> input_pv;
-    if (i_src->IsConstTensor()) {
-      perm_out = context_->infer_graph_->CreateTensor(i_src->GetSpec(),
-                                                      i_src->GetDataRef());
-      input_pv = MakeShared(i_src->GetShape().size());
-    } else {
-      perm_out = context_->GetMapedTensor(i_src);
-      input_pv = context_->GetPermuteVector(i_src);
-      if (!input_pv->IsAligned()) {
-        perm_out =
-            InsertPermute(perm_out, input_pv->Reverse());
+    if (i_src->GetId() != (uint32_t)-1) {
+      if (i_src->IsConstTensor()) {
+        perm_out = context_->infer_graph_->CreateTensor(i_src->GetSpec(),
+                                                        i_src->GetDataRef());
+        input_pv = MakeShared(i_src->GetShape().size());
+      } else {
+        perm_out = context_->GetMapedTensor(i_src);
+        input_pv = context_->GetPermuteVector(i_src);
+        if (!input_pv->IsAligned()) {
+          perm_out = InsertPermute(perm_out, input_pv->Reverse());
+        }
       }
+      context_->UpdateTensorMap(i_src, perm_out);
+      context_->SetPermuteVector(i_src, MakeShared(input_pv->Rank()));
     }
-    context_->UpdateTensorMap(i_src, perm_out);
-    context_->SetPermuteVector(i_src, MakeShared(input_pv->Rank()));
   }
 }
 
@@ -318,14 +321,29 @@ bool OpLayoutInfer::TransposeConstTensorData(
     reverse_shape.push_back(input->GetShape()[i]);
   }
   std::vector<uint32_t> perm = KOcHWIc2OcIcHW;
-  std::vector<uint32_t>tmp_vec = kOcIcWH2WHIcOc;
-  if (pv->AsStdVec() == tmp_vec) {
+  std::vector<uint32_t> tmp_vec0 = kOcIcWH2WHIcOc;
+  std::vector<uint32_t> tmp_vec1 = kIcOcWH2WHIcOc;
+  std::vector<uint32_t> tmp_vec2 = kOcIcWHD2WHDIcOc;
+  if (pv->AsStdVec() == tmp_vec0) {
     perm = kHWIcOc2OcIcHW;
+  } else if (pv->AsStdVec() == tmp_vec1) {
+    perm = kHWOcIc2OcIcHW;
+  } else if (pv->AsStdVec() == tmp_vec2) {
+    perm = kDHWIcOc2OcIcDHW;
   }
+
+  std::vector<vsi_size_t> native_shape_array;
+  std::vector<vsi_size_t> native_perm;
+  std::transform(reverse_shape.begin(), reverse_shape.end(),
+                 std::back_inserter(native_shape_array),
+                 [](const uint32_t& i) { return i; });
+  std::transform(perm.begin(), perm.end(), std::back_inserter(native_perm),
+                 [](const uint32_t& i) { return i; });
   vsi_nn_Transpose(out_data.data(), (uint8_t*)(input->GetDataRef()),
-                   (uint32_t*)(reverse_shape.data()),
+                   native_shape_array.data(),
                    static_cast<uint32_t>(input->GetShape().size()),
-                   perm.data(), vx_type);
+                   native_perm.data(), vx_type);
+
   return true;
 }
 
@@ -374,6 +392,14 @@ std::vector<int32_t> OpLayoutInfer::MapMultipleAxis(
   }
 
   return r;
+}
+
+int32_t OpLayoutInfer::MapMask(const std::vector<uint32_t>& perm,
+                               int32_t mask) {
+  int32_t m = 0;
+  for (uint32_t i = 0; i < perm.size(); ++i)
+    if (mask & 1 << perm[i]) m |= (0x01 << i);
+  return m;
 }
 
 }  // namespace transform

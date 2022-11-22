@@ -34,7 +34,9 @@ static vsi_status query_hardware_caps
 {
     vsi_status status = VSI_FAILURE;
     vx_hardware_caps_params_t param;
-
+#if VX_STREAM_PROCESSOR_SUPPORT
+    vx_hardware_caps_params_ext2_t paramExt2;
+#endif
 #if VX_HARDWARE_CAPS_PARAMS_EXT_SUPPORT
     vx_hardware_caps_params_ext_t paramExt;
 
@@ -51,8 +53,21 @@ static vsi_status query_hardware_caps
 
 #if VX_HARDWARE_CAPS_PARAMS_EXT_SUPPORT
     context->config.subGroupSize = paramExt.subGroupSize;
-#if VX_VA40_EXT_SUPPORT
+#ifdef VSI_40BIT_VA_SUPPORT
     context->config.use_40bits_va = paramExt.supportVA40;
+#endif
+#if VX_STREAM_PROCESSOR_SUPPORT
+    memset(&paramExt2, 0, sizeof(vx_hardware_caps_params_ext2_t));
+    status = vxQueryHardwareCaps(context->c, (vx_hardware_caps_params_t*)(&paramExt2),
+                sizeof(vx_hardware_caps_params_ext2_t));
+    context->config.support_stream_processor = paramExt.supportStreamProcessor;
+    context->config.sp_exec_count = paramExt2.streamProcessorExecCount;
+    context->config.sp_vector_depth = paramExt2.streamProcessorVectorSize;
+    if (context->config.sp_exec_count > 0)
+    {
+        context->config.sp_per_core_vector_depth =
+            context->config.sp_vector_depth / context->config.sp_exec_count;
+    }
 #endif
 
 #endif
@@ -77,7 +92,7 @@ final:
 
 int32_t vsi_nn_getEnv(const char* name, char** env_s) {
     int32_t ret = 0;
-    *env_s = getenv(name);
+    *env_s = vsi_nn_getenv(name);
     if (*env_s) {
         ret = TRUE;
     }
@@ -110,6 +125,20 @@ static vsi_status vsi_nn_initOptions
     if (vsi_nn_getEnv("VSI_NN_ENABLE_CONCAT_OPTIMIZE", &env_s) && env_s)
     {
         options->enable_concat_optimize = atoi(env_s);
+    }
+
+    env_s = NULL;
+    options->enable_asymi8_to_u8 = 1;
+    if (vsi_nn_getEnv("VSI_NN_ENABLE_I8TOU8", &env_s) && env_s)
+    {
+        options->enable_asymi8_to_u8 = atoi(env_s);
+    }
+
+    env_s = NULL;
+    options->enable_dataconvert_optimize = 1;
+    if (vsi_nn_getEnv("VSI_NN_ENABLE_DATACONVERT_OPTIMIZE", &env_s) && env_s)
+    {
+        options->enable_dataconvert_optimize = atoi(env_s);
     }
 
     return VSI_SUCCESS;

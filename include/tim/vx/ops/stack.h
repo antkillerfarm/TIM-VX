@@ -23,7 +23,7 @@
 *****************************************************************************/
 #ifndef TIM_VX_OPS_STACK_H_
 #define TIM_VX_OPS_STACK_H_
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -33,10 +33,11 @@ namespace ops {
  * ## Stack
  *
  * Packs the list of tensors in inputs into a tensor with rank one higher than
- * each tensor in values, by packing them along the **axis** dimension. 
+ * each tensor in values, by packing them along the **axis** dimension.
+ * Dimensions below the dimension specified by axis will be packed together with other inputs.
  */
 
-class Stack : public Operation {
+class Stack : public BuiltinOp {
  public:
   Stack(Graph* graph, uint32_t axis, int input_cnt);
 

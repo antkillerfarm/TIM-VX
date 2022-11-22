@@ -33,6 +33,7 @@
 #include "vsi_nn_log.h"
 #include "utils/vsi_nn_util.h"
 #include "utils/vsi_nn_math.h"
+#include "vsi_nn_error.h"
 
 typedef struct _node_io_signature_t {
     int count;
@@ -44,6 +45,8 @@ static const char* _get_dtype_name(vsi_nn_type_e type)
     switch(type)
     {
         case D_NONE: return "Optional";
+        case D_I4: return "INT4";
+        case D_U4: return "UINT4";
         case D_I8: return "INT8";
         case D_I16: return "INT16";
         case D_I32: return "INT32";
@@ -72,6 +75,7 @@ static const char* _get_qtype_name(vsi_nn_qnt_type_e type)
         case VSI_NN_QNT_TYPE_NONE: return "";
         case VSI_NN_QNT_TYPE_DFP: return "DFP";
         case VSI_NN_QNT_TYPE_AFFINE_ASYMMETRIC: return "ASYM";
+        case VSI_NN_QNT_TYPE_AFFINE_SYMMETRIC: return "SYM";
         case VSI_NN_QNT_TYPE_AFFINE_PERCHANNEL_SYMMETRIC: return "SYMM PC";
         default:
             VSILOGE("Unknown quant type: %d\n", type);
@@ -102,6 +106,7 @@ static node_io_signature_t* _get_op_signature
 
     item = malloc(sizeof(node_io_signature_t) + \
         (reg_io_count - 1) * sizeof(vsi_nn_type_e));
+    CHECK_PTR_FAIL_GOTO( item, "Create buffer fail.", final );
     item->count = inputs_num + outputs_num;
     memset(&item->types[0], 0x00, reg_io_count * sizeof(vsi_nn_type_e));
 
@@ -128,6 +133,7 @@ static node_io_signature_t* _get_op_signature
                 outputs[i]->attr.dtype.qnt_type << Q_SHIFT;
     }
 
+final:
     return item;
 }
 
@@ -231,14 +237,14 @@ char* generate_op_io_types_desc
     memset(desc, 0x00, sizeof(char) * total_sz);
 
     for(i = 0; i < inputs_num; i++) {
-        if(inputs[i]) {
+        if(inputs[i] && total_sz >= used_sz) {
             used_sz += snprintf(desc + used_sz, total_sz - used_sz, "%s %s, ",
                     _get_qtype_name(inputs[i]->attr.dtype.qnt_type),
                     _get_dtype_name(inputs[i]->attr.dtype.vx_type));
         }
     }
     for(i = 0; i < outputs_num; i++) {
-        if(outputs[i]) {
+        if(outputs[i] && total_sz >= used_sz) {
             used_sz += snprintf(desc + used_sz, total_sz - used_sz, "%s %s, ",
                     _get_qtype_name(outputs[i]->attr.dtype.qnt_type),
                     _get_dtype_name(outputs[i]->attr.dtype.vx_type));

@@ -2,6 +2,7 @@ cmake_minimum_required (VERSION 3.14)
 project(tim-vx LANGUAGES C CXX)
 
 option(BUILD_SHARED_LIBS                "Build using shared libraries"          ON)
+option(TIM_VX_ENABLE_CUSTOM_OP          "Enable custom op support"              OFF)
 option(TIM_VX_ENABLE_TEST               "Build the unit test"                   OFF)
 option(TIM_VX_ENABLE_LAYOUT_INFER       "Enable layout inference support"       ON)
 option(TIM_VX_ENABLE_NBG_PARSER         "Enable NBG parser"                     OFF)
@@ -9,6 +10,8 @@ option(TIM_VX_CODE_COVERAGE             "Run code coverage with gconv(gcc only" 
 option(TIM_VX_USE_EXTERNAL_OVXLIB       "Use external OVXLIB"                   OFF)
 option(TIM_VX_BUILD_EXAMPLES            "Build demos show general usage"        OFF)
 option(TIM_VX_ENABLE_VIPLITE            "Enable lite driver api support"        OFF)
+option(TIM_VX_ENABLE_40BIT              "Enable large memory support"           OFF)
+option(TIM_VX_ENABLE_PLATFORM           "Enable multi devices support"          OFF)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -20,8 +23,19 @@ if(${TIM_VX_CODE_COVERAGE})
     set(CMAKE_C_FLAGS "-g -O0 --coverage -fprofile-arcs -ftest-coverage")
 endif()
 
+include(GNUInstallDirs)
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "" FORCE)
+endif()
+
+if(${TIM_VX_ENABLE_40BIT})
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DVSI_40BIT_VA_SUPPORT")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVSI_40BIT_VA_SUPPORT")
+endif()
+
+if(${TIM_VX_ENABLE_CUSTOM_OP})
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DTIM_VX_ENABLE_CUSTOM_OP")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTIM_VX_ENABLE_CUSTOM_OP")
 endif()
 
 set(CMAKE_C_VISIBILITY_PRESET hidden)
@@ -38,6 +52,8 @@ else()
         include(cmake/vim3_android.cmake)
     elseif("${CONFIG}" STREQUAL "YOCTO")
         include(cmake/YOCTO.cmake)
+    elseif("${CONFIG}" STREQUAL "BUILDROOT")
+        include(cmake/YOCTO.cmake)
     else()
         include(cmake/X86_64_linux.cmake)
     endif()
@@ -48,7 +64,7 @@ if(TIM_VX_ENABLE_TEST)
     FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG release-1.10.0
+    GIT_TAG release-1.12.0
     )
 
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)

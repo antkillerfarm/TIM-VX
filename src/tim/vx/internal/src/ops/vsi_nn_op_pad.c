@@ -35,6 +35,8 @@
 #include "utils/vsi_nn_util.h"
 #include "utils/vsi_nn_math.h"
 #include "utils/vsi_nn_constraint_check.h"
+#include "utils/vsi_nn_dtype_util.h"
+#include "vsi_nn_error.h"
 
 vsi_status vsi_nn_InitPadParameter
     (
@@ -44,13 +46,16 @@ vsi_status vsi_nn_InitPadParameter
 {
     int32_t pad_const_val;
     uint8_t i;
-    if(NULL == node || NULL == param)
+    vsi_status status = VSI_FAILURE;
+
+    memset(param, 0, sizeof(vx_nn_pad_params_t));
+
+    if (NULL == node)
     {
         VSILOGE("Set param fail\n");
         return VSI_FAILURE;
     }
 
-    memset(param, 0, sizeof(vx_nn_pad_params_t));
     pad_const_val = node->nn_param.pad.const_val;
     param->pad_mode = node->nn_param.pad.mode;
     param->pad_const = vxCreateScalar( node->graph->ctx->c, VX_TYPE_INT32, &pad_const_val );
@@ -84,7 +89,11 @@ vsi_status vsi_nn_InitPadParameter
      */
     param->numViewDimensions = vsi_nn_max(node->nn_param.pad.dim_num, 2);
     param->pad_front_array = (int32_t *)malloc(sizeof(int32_t) * param->numViewDimensions);
+    CHECK_PTR_FAIL_GOTO( param->pad_front_array, "Create buffer fail.", final );
     param->pad_back_array = (int32_t *)malloc(sizeof(int32_t) * param->numViewDimensions);
+    CHECK_PTR_FAIL_GOTO( param->pad_back_array, "Create buffer fail.", final );
+    status = VSI_SUCCESS;
+
     memset(param->pad_front_array, 0, sizeof(int32_t) * param->numViewDimensions);
     memset(param->pad_back_array, 0, sizeof(int32_t) * param->numViewDimensions);
     for(i=0; i < vsi_nn_min(param->numViewDimensions, node->nn_param.pad.dim_num); i++)
@@ -93,7 +102,8 @@ vsi_status vsi_nn_InitPadParameter
         param->pad_back_array[i]  = (int32_t)node->nn_param.pad.back_size[i];
     }
 
-    return VSI_SUCCESS;
+final:
+    return status;
 } /* vsi_nn_InitPadParameter() */
 
 void vsi_nn_DeinitPadParameter
@@ -127,28 +137,57 @@ static vsi_status op_compute
 {
     vsi_status status;
     vx_nn_pad_params_t p;
+    vsi_nn_tensor_t *convert_tensor = NULL;
+    vsi_bool release_intermediate_tensor = TRUE;
 
     status = VSI_FAILURE;
-    if(VSI_SUCCESS != vsi_nn_InitPadParameter(self, &p))
+    if (VSI_SUCCESS != vsi_nn_InitPadParameter(self, &p))
     {
         VSILOGE("Set Pad Layer Parameter fail\n");
-        return VSI_FAILURE;
+        goto final;
     }
 
+    if ( vsi_nn_DtypeCompare(&inputs[0]->attr.dtype, &outputs[0]->attr.dtype) == FALSE)
+    {
+        vsi_nn_tensor_attr_t attr;
+        memcpy( &attr, &outputs[0]->attr, sizeof( attr ) );
+        memcpy( &attr.size, &inputs[0]->attr.size, sizeof( attr.size ) );
+        attr.vtl = FALSE;
+        attr.is_const = FALSE;
+
+        convert_tensor = vsi_nn_CreateTensor(self->graph, &attr);
+
+        self->n = vxTensorCopyNode(
+            self->graph->g,
+            inputs[0]->t,
+            convert_tensor->t
+            );
+    }
+    else
+    {
+        convert_tensor = inputs[0];
+        release_intermediate_tensor = FALSE;
+    }
     self->n = vxTensorPadNode(
         self->graph->g,
-        inputs[0]->t,
+        convert_tensor->t,
         outputs[0]->t,
         &p,
         sizeof(p)
         );
 
-    vsi_nn_DeinitPadParameter(&p);
-
-    if( NULL != self->n )
+    if ( NULL != self->n )
     {
         status = VSI_SUCCESS;
     }
+
+final:
+    vsi_nn_DeinitPadParameter(&p);
+    if (release_intermediate_tensor)
+    {
+        vsi_safe_release_tensor(convert_tensor);
+    }
+
     return status;
 } /* op_compute() */
 
@@ -160,14 +199,26 @@ static vsi_bool op_check
     )
 {
     BEGIN_IO_TYPE_DECL(PAD, 1, 1)
-        IO_TYPE(D_F32,  D_F32)
-        IO_TYPE(D_F32,  D_BF16)
-        IO_TYPE(D_BF16, D_F32)
-        IO_TYPE(D_BF16, D_BF16)
-        IO_TYPE(D_F16,  D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,   D_I8|Q_DFP)
+        IO_TYPE(D_F32,          D_F32)
+        IO_TYPE(D_F32,          D_BF16)
+        IO_TYPE(D_BF16,         D_F32)
+        IO_TYPE(D_BF16,         D_BF16)
+        IO_TYPE(D_F16,          D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I32,          D_I32)
+
+        /* HW 9.1.1 */
+        IO_TYPE(D_U4|Q_ASYM,    D_U4|Q_ASYM)
+        IO_TYPE(D_U4|Q_SYM,     D_U4|Q_SYM)
+        IO_TYPE(D_I4|Q_ASYM,    D_I4|Q_ASYM)
+        IO_TYPE(D_I4|Q_SYM,     D_I4|Q_SYM)
+
     END_IO_TYPE_DECL(PAD)
     if (!VALIDATE_OP_IO_TYPES(PAD, self, inputs, self->input.num, outputs, self->output.num))
     {
@@ -219,7 +270,7 @@ static vsi_bool op_setup
             if (front + back + inputs[0]->attr.size[i] != outputs[0]->attr.size[i])
             {
                 VSILOGE("Error:output shape[%u] not equal front padding[%u] + input shape[%u] + back padding[%u]",
-                    outputs[0]->attr.size[i], front, back);
+                    outputs[0]->attr.size[i], front, inputs[0]->attr.size[i], back);
                 return FALSE;
             }
         }

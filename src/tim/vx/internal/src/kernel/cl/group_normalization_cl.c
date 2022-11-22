@@ -22,7 +22,6 @@
 *
 *****************************************************************************/
 
-
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -445,45 +444,6 @@ static vsi_status _query_kernel
     return status;
 } /* _query_kernel() */
 
-static int32_t _optimize_gn_shape_cl
-    (
-    vsi_nn_tensor_t ** inputs,
-    vsi_size_t group_size,
-    int32_t group_num,
-    vsi_size_t* opt_shape,
-    int32_t* is2D_flg
-    )
-{
-    vsi_status status = VSI_SUCCESS;
-    vsi_size_t group_shape[VSI_NN_MAX_DIM_NUM] = {0};
-    vsi_size_t new_rank = 0;
-    group_shape[0] = inputs[0]->attr.size[0];
-    group_shape[1] = inputs[0]->attr.size[1];
-    group_shape[2] = group_size;
-
-    vsi_nn_kernel_optimize_element_shape(group_shape, 3, opt_shape, &new_rank );
-
-    if (opt_shape[1] == 1)
-    {
-        opt_shape[1] = group_num;
-        opt_shape[2] = 1;
-        opt_shape[3] = inputs[0]->attr.dim_num > 3 ? inputs[0]->attr.size[3] : 1;
-        is2D_flg[0] = 1;
-    }
-    else if (new_rank == 2)
-    {
-        opt_shape[2] = group_num;
-        opt_shape[3] = inputs[0]->attr.dim_num > 3 ? inputs[0]->attr.size[3] : 1;
-    }
-    else
-    {
-        status = VSI_FAILURE;
-    }
-
-    return status;
-}
-
-
 static vsi_nn_kernel_node_t _setup
     (
     vsi_nn_graph_t              * graph,
@@ -522,12 +482,10 @@ static vsi_nn_kernel_node_t _setup
     vsi_size_t width = inputs[0]->attr.size[0];
     vsi_size_t height = inputs[0]->attr.size[1];
     int32_t group_stride = 1;
-    float input_zp = 0;
-    float input_scale = 1.0f;
-    int32_t input_fl = 0;
-    float output_zp = 0;
-    float output_scale = 1.0f;
-    int32_t output_fl = 0;
+    float input_zp = (float)vsi_nn_get_tensor_zero_point(inputs[0]);
+    float input_scale = vsi_nn_get_tensor_scale(inputs[0]);
+    float output_zp = (float)vsi_nn_get_tensor_zero_point(outputs[0]);
+    float output_scale = 1.0f / vsi_nn_get_tensor_scale(outputs[0]);
     float rSpaceOrg = 1.0f / (width * height);
     float group_ratio = 1.0f / (inputs[0]->attr.size[0] * inputs[0]->attr.size[1] * group_size);
 
@@ -537,55 +495,19 @@ static vsi_nn_kernel_node_t _setup
         return NULL;
     }
 
-    status = _optimize_gn_shape_cl(inputs, group_size, group_num, new_shape, &is2D_flg);
+    status =  vsi_nn_kernel_optimize_group_norm_shape( (const vsi_size_t*)inputs[0]->attr.size,
+        inputs[0]->attr.dim_num, group_num, 0, new_shape);
     if ( VSI_SUCCESS != status )
     {
         goto final;
     }
+    is2D_flg = (new_shape[2] == 1) && ((int32_t)new_shape[1] == group_num);
     rs_input = vsi_nn_kernel_tensor_reshape(inputs[0]->t, new_shape, 4);
     rs_output = vsi_nn_kernel_tensor_reshape(outputs[0]->t, new_shape, 4);
 
     width = new_shape[0];
     height = is2D_flg > 0 ? 1 : new_shape[1];
     group_stride = (int32_t)(((width + 15) / 16) * 4);
-
-    if (inputs[0]->attr.dtype.qnt_type == VSI_NN_QNT_TYPE_AFFINE_ASYMMETRIC)
-    {
-        input_zp = (float)inputs[0]->attr.dtype.zero_point;
-        input_scale = inputs[0]->attr.dtype.scale;
-    }
-    else if (inputs[0]->attr.dtype.qnt_type == VSI_NN_QNT_TYPE_DFP)
-    {
-        input_fl = inputs[0]->attr.dtype.fl;
-        if (input_fl > 0)
-        {
-            input_scale = (1.0f / ((float) ((int64_t)1 << input_fl)));
-        }
-        else
-        {
-            input_scale = ((float) ((int64_t)1 << -input_fl));
-        }
-        input_zp = 0.0f;
-    }
-
-    if (outputs[0]->attr.dtype.qnt_type == VSI_NN_QNT_TYPE_AFFINE_ASYMMETRIC)
-    {
-        output_zp = (float)outputs[0]->attr.dtype.zero_point;
-        output_scale = 1.0f / outputs[0]->attr.dtype.scale;
-    }
-    else if (outputs[0]->attr.dtype.qnt_type == VSI_NN_QNT_TYPE_DFP)
-    {
-        output_fl = outputs[0]->attr.dtype.fl;
-        if (output_fl > 0)
-        {
-            output_scale = (float)((int64_t)1 << output_fl);
-        }
-        else
-        {
-            output_scale = (1.0f / (float)((int64_t)1 << -output_fl));
-        }
-        output_zp = 0.0f;
-    }
 
     for( i = 0; i < INTERNAL_KERNEL_SIZE; i ++ )
     {
@@ -757,4 +679,3 @@ final:
 __END_DECLS
 
 REGISTER_BACKEND_CL( group_norm, _setup )
-

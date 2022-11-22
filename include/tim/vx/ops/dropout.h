@@ -23,7 +23,7 @@
 *****************************************************************************/
 #ifndef OVXLIBXX_OPERATIONS_DROPOUT_H_
 #define OVXLIBXX_OPERATIONS_DROPOUT_H_
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 
 namespace tim {
@@ -40,7 +40,7 @@ namespace ops {
  * for Dropout operator.
  */
 
-class Dropout : public Operation {
+class Dropout : public BuiltinOp {
  public:
   Dropout(Graph* graph, float ratio);
 

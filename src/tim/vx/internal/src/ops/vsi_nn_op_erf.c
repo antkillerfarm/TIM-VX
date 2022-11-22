@@ -22,7 +22,6 @@
 *
 *****************************************************************************/
 
-
 #include <string.h>
 #include <stdlib.h>
 
@@ -71,30 +70,35 @@ static vsi_bool op_check
 {
     BEGIN_IO_TYPE_DECL(ERF, 1, 1)
         /* IO_TYPE(INPUT, OUTPUT) */
-        IO_TYPE(D_F32, D_F32)
-        IO_TYPE(D_F32, D_F16)
-        IO_TYPE(D_F32, D_BF16)
+        IO_TYPE(D_F32,          D_F32)
+        IO_TYPE(D_F32,          D_F16)
+        IO_TYPE(D_F32,          D_BF16)
+        IO_TYPE(D_F16,          D_F32)
+        IO_TYPE(D_F16,          D_F16)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_BF16,         D_BF16)
+        IO_TYPE(D_BF16,         D_F32)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_DFP,    D_F16)
 
-        IO_TYPE(D_F16, D_F32)
-        IO_TYPE(D_F16, D_F16)
-        IO_TYPE(D_F16, D_U8|Q_ASYM)
-        IO_TYPE(D_F16, D_I8|Q_DFP)
-        IO_TYPE(D_F16, D_I16|Q_DFP)
+        /* HW 9.1.1 */
+        IO_TYPE(D_U4|Q_ASYM,    D_U4|Q_ASYM)
+        IO_TYPE(D_U4|Q_SYM,     D_U4|Q_SYM)
+        IO_TYPE(D_I4|Q_ASYM,    D_I4|Q_ASYM)
+        IO_TYPE(D_I4|Q_SYM,     D_I4|Q_SYM)
 
-        IO_TYPE(D_BF16, D_BF16)
-        IO_TYPE(D_BF16, D_F32)
-
-        IO_TYPE(D_U8|Q_ASYM, D_U8|Q_ASYM)
-        IO_TYPE(D_U8|Q_ASYM, D_F16)
-
-        IO_TYPE(D_I8|Q_ASYM, D_I8|Q_ASYM)
-        IO_TYPE(D_I8|Q_ASYM, D_F16)
-
-        IO_TYPE(D_I8|Q_DFP, D_I8|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP, D_F16)
-
-        IO_TYPE(D_I16|Q_DFP, D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP, D_F16)
     END_IO_TYPE_DECL(ERF)
     if (!VALIDATE_OP_IO_TYPES(ERF, self, inputs, self->input.num, outputs, self->output.num))
     {
@@ -107,7 +111,6 @@ static vsi_bool op_check
 
     return TRUE;
 } /* op_check() */
-
 
 __BEGIN_DECLS
 

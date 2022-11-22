@@ -41,15 +41,11 @@
 #include "utils/vsi_nn_util.h"
 #include "vsi_nn_prv.h"
 #include "vsi_nn_log.h"
-#include "libnnext/vsi_nn_vxkernel.h"
 #include "vsi_nn_internal_node.h"
+#include "kernel/vsi_nn_kernel.h"
 
-#define _ARG_NUM            (1)
 #define _INPUT_NUM          (1)
 #define _OUTPUT_NUM         (1)
-#define _IO_NUM             (_INPUT_NUM + _OUTPUT_NUM)
-#define _PARAM_NUM          (_ARG_NUM + _IO_NUM)
-
 
 static vsi_bool _is_same_shape
     (
@@ -81,33 +77,45 @@ static vsi_status op_compute
 {
     vsi_status status = VSI_FAILURE;
 
-    if ( ((self->nn_param.resize.align_corners || self->nn_param.resize.half_pixel_centers)
-       && (VSI_NN_INTERPOLATION_BILINEAR == self->nn_param.resize.type
-          || VSI_NN_INTERPOLATION_NEAREST_NEIGHBOR == self->nn_param.resize.type))
-       || _is_same_shape(inputs[0], outputs[0]->attr.size, outputs[0]->attr.dim_num) )
+    if ( self->nn_param.resize.lcl_data->use_internal_node )
     {
         status = vsi_nn_internal_compute_node( self );
     }
     else
     {
-        vx_nn_scale_params_t para;
+        char kernel_name[128];
+        vsi_nn_kernel_param_t * param = NULL;
+        int32_t align_corners = self->nn_param.resize.align_corners;
+        int32_t half_pixel_centers = self->nn_param.resize.half_pixel_centers;
+
+        param = vsi_nn_kernel_param_create();
+
+        vsi_nn_kernel_param_add_int32( param, "align_corners",  align_corners );
+        vsi_nn_kernel_param_add_int32( param, "half_pixel_centers",  half_pixel_centers );
+        vsi_nn_kernel_param_add_int32( param, "type",  self->nn_param.resize.type );
+
         switch (self->nn_param.resize.type)
         {
             case VSI_NN_INTERPOLATION_NEAREST_NEIGHBOR:
-                para.type = VX_INTERPOLATION_NEAREST_NEIGHBOR; break;
+                 snprintf(kernel_name, sizeof(kernel_name),
+                 "resize_nearest");
+                 break;
             case VSI_NN_INTERPOLATION_BILINEAR:
-                para.type = VX_INTERPOLATION_BILINEAR; break;
-            case VSI_NN_INTERPOLATION_AREA:
-                para.type = VX_INTERPOLATION_AREA; break;
+                 snprintf(kernel_name, sizeof(kernel_name),
+                 "resize_bilinear");
+                 break;
             default:
-                para.type = VX_INTERPOLATION_NEAREST_NEIGHBOR;
+                break;
         }
-        self->n = vxTensorScaleNode( self->graph->g, inputs[0]->t, &para,
-            sizeof(vx_nn_scale_params_t), outputs[0]->t );
-        if( NULL != self->n )
-        {
+
+        self->n = (vx_node)vsi_nn_kernel_selector( self->graph,
+            kernel_name, &inputs[0], 1, &outputs[0], 1, param );
+
+        if (self->n) {
             status = VSI_SUCCESS;
         }
+
+        vsi_nn_kernel_param_release(&param);
     }
 
     return status;
@@ -121,15 +129,22 @@ static vsi_status op_optimize
     vsi_nn_opt_direction_e direction
     )
 {
-    if ( ((self->nn_param.resize.align_corners || self->nn_param.resize.half_pixel_centers)
-       && (VSI_NN_INTERPOLATION_BILINEAR == self->nn_param.resize.type
-          || VSI_NN_INTERPOLATION_NEAREST_NEIGHBOR == self->nn_param.resize.type) )
-        || _is_same_shape(inputs[0], outputs[0]->attr.size, outputs[0]->attr.dim_num) )
+    if ( self->nn_param.resize.lcl_data->use_internal_node )
     {
         return vsi_nn_internal_optimize_node(self, direction );
     }
     else
     {
+        int32_t half_pixel_centers = self->nn_param.resize.half_pixel_centers;
+        vsi_size_t * input_size = inputs[0]->attr.size;
+        vsi_size_t * output_size = outputs[0]->attr.size;
+
+        if ( (output_size[0] % input_size[0] == 0) && (output_size[1] % input_size[1] == 0) &&
+            half_pixel_centers == TRUE && self->nn_param.resize.type == VSI_NN_INTERPOLATION_NEAREST_NEIGHBOR )
+        {
+            self->nn_param.resize.half_pixel_centers = FALSE;
+        }
+
         return VSI_SUCCESS;
     }
 } /* op_optimize() */
@@ -154,51 +169,69 @@ static vsi_bool op_setup
 {
     /* TODO: Add code to comput outputs' shape. */
     float factor = self->nn_param.resize.factor;
+    vsi_enum layout = self->nn_param.resize.layout;
     vsi_nn_internal_node_t* curr = NULL;
 
-    if( VSI_NN_DIM_AUTO == outputs[0]->attr.dim_num )
+    if ( VSI_NN_DIM_AUTO == outputs[0]->attr.dim_num )
     {
         outputs[0]->attr.dim_num = inputs[0]->attr.dim_num;
         if (factor != 0)
         {
-            outputs[0]->attr.size[0] = (uint32_t)(inputs[0]->attr.size[0] * factor);
-            outputs[0]->attr.size[1] = (uint32_t)(inputs[0]->attr.size[1] * factor);
+            if (layout == VSI_NN_RESIZE_LAYOUT_NCHW)
+            {
+                outputs[0]->attr.size[0] = (uint32_t)(inputs[0]->attr.size[0] * factor);
+                outputs[0]->attr.size[1] = (uint32_t)(inputs[0]->attr.size[1] * factor);
+            }
+            else
+            {
+                outputs[0]->attr.size[1] = (uint32_t)(inputs[0]->attr.size[1] * factor);
+                outputs[0]->attr.size[2] = (uint32_t)(inputs[0]->attr.size[2] * factor);
+            }
         }
         else
         {
-            outputs[0]->attr.size[0] = self->nn_param.resize.size[0];
-            outputs[0]->attr.size[1] = self->nn_param.resize.size[1];
+            if (layout == VSI_NN_RESIZE_LAYOUT_NCHW)
+            {
+                outputs[0]->attr.size[0] = self->nn_param.resize.size[0];
+                outputs[0]->attr.size[1] = self->nn_param.resize.size[1];
+            }
+            else
+            {
+                outputs[0]->attr.size[1] = self->nn_param.resize.size[0];
+                outputs[0]->attr.size[2] = self->nn_param.resize.size[1];
+            }
         }
-        outputs[0]->attr.size[2] = inputs[0]->attr.size[2];
-        outputs[0]->attr.size[3] = inputs[0]->attr.size[3];
+        if (layout == VSI_NN_RESIZE_LAYOUT_NCHW)
+        {
+            outputs[0]->attr.size[2] = inputs[0]->attr.size[2];
+            outputs[0]->attr.size[3] = inputs[0]->attr.size[3];
+        }
+        else
+        {
+            outputs[0]->attr.size[0] = inputs[0]->attr.size[0];
+            outputs[0]->attr.size[3] = inputs[0]->attr.size[3];
+        }
     }
 
-    if ((self->nn_param.resize.align_corners || self->nn_param.resize.half_pixel_centers)
-       && (VSI_NN_INTERPOLATION_BILINEAR == self->nn_param.resize.type))
+    if ( ( layout == VSI_NN_RESIZE_LAYOUT_NHWC )
+       && ( VSI_NN_INTERPOLATION_BILINEAR == self->nn_param.resize.type ) )
     {
+        self->nn_param.resize.lcl_data->use_internal_node = TRUE;
+
         vsi_nn_internal_init_node_wksp( self );
         curr = vsi_nn_internal_new_node( self, VSI_NN_OP_RESIZE_INTERNAL, 0, 0 );
         curr->node->nn_param.resize_internal.align_corners = self->nn_param.resize.align_corners;
         curr->node->nn_param.resize_internal.factor = self->nn_param.resize.factor;
         curr->node->nn_param.resize_internal.half_pixel_centers = self->nn_param.resize.half_pixel_centers;
-        curr->inputs[0]  = inputs[0];
-        curr->outputs[0] = outputs[0];
-        vsi_nn_internal_setup_node(self, curr);
-    }
-    else if ((self->nn_param.resize.align_corners || self->nn_param.resize.half_pixel_centers)
-            && (VSI_NN_INTERPOLATION_NEAREST_NEIGHBOR == self->nn_param.resize.type))
-    {
-        vsi_nn_internal_init_node_wksp( self );
-        curr = vsi_nn_internal_new_node( self, VSI_NN_OP_RESIZE_NEAREST_INTERNAL, 0, 0 );
-        curr->node->nn_param.resize_nearest_internal.align_corners = self->nn_param.resize.align_corners;
-        curr->node->nn_param.resize_nearest_internal.factor = self->nn_param.resize.factor;
-        curr->node->nn_param.resize_nearest_internal.half_pixel_centers = self->nn_param.resize.half_pixel_centers;
+        curr->node->nn_param.resize_internal.layout = self->nn_param.resize.layout;
         curr->inputs[0]  = inputs[0];
         curr->outputs[0] = outputs[0];
         vsi_nn_internal_setup_node(self, curr);
     }
     else if (_is_same_shape(inputs[0], outputs[0]->attr.size, outputs[0]->attr.dim_num))
     {
+        self->nn_param.resize.lcl_data->use_internal_node = TRUE;
+
         vsi_nn_internal_init_node_wksp( self );
         curr = vsi_nn_internal_new_node( self, VSI_NN_OP_DATACONVERT, 0, 0 );
         curr->inputs[0]  = inputs[0];
@@ -214,14 +247,14 @@ static vsi_status op_deinit
     vsi_nn_node_t * self
     )
 {
-    if ((self->nn_param.resize.align_corners || self->nn_param.resize.half_pixel_centers)
-       && (VSI_NN_INTERPOLATION_BILINEAR == self->nn_param.resize.type
-          || VSI_NN_INTERPOLATION_NEAREST_NEIGHBOR == self->nn_param.resize.type))
+    if (self->nn_param.resize.lcl_data->use_internal_node)
     {
+        vsi_nn_safe_free(self->nn_param.resize.lcl_data);
         vsi_nn_internal_deinit_node_wksp(self);
     }
     else
     {
+        vsi_nn_safe_free(self->nn_param.resize.lcl_data);
         vsi_nn_op_common_deinit(self);
     }
 
@@ -235,12 +268,22 @@ static vsi_status op_init
 {
     vsi_status status = VSI_SUCCESS;
 
-    if (vsi_nn_compareVersion(self->graph, 1, 1, 14) == -1)
+    self->nn_param.resize.lcl_data =
+        (vsi_nn_resize_local_data *)malloc( sizeof(vsi_nn_resize_local_data) );
+    if ( NULL == self->nn_param.resize.lcl_data )
     {
-        self->nn_param.resize.align_corners      = FALSE;
-        self->nn_param.resize.half_pixel_centers = FALSE;
+        VSILOGE( "Create resize local data fail." );
+        status = VSI_FAILURE;
+        goto final;
     }
+    memset( self->nn_param.resize.lcl_data, 0, sizeof(vsi_nn_resize_local_data) );
 
+    self->nn_param.resize.align_corners = FALSE;
+    self->nn_param.resize.half_pixel_centers = FALSE;
+
+    self->nn_param.resize.layout = VSI_NN_RESIZE_LAYOUT_NCHW;
+
+final:
     return status;
 } /* op_init() */
 
@@ -263,4 +306,3 @@ DEF_OP_REG
 #ifdef __cplusplus
 }
 #endif
-

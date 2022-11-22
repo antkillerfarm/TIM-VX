@@ -26,19 +26,30 @@
 
 #include "context_private.h"
 #include "graph_private.h"
-#include "operation_private.h"
+#include "op_impl.h"
 #include "tensor_private.h"
 #include "tim/vx/context.h"
 #include "tim/vx/ops/nbg.h"
+#include "tim/vx/compile_option.h"
 #include "vsi_nn_pub.h"
 
 namespace tim {
 namespace vx {
 
-GraphImpl::GraphImpl(ContextImpl* context)
+const std::vector<std::shared_ptr<Tensor>> Graph::GetConstantInputs() const {
+    std::vector<std::shared_ptr<Tensor>> const_inputs;
+    for (auto op : op_vector_) {
+      auto const_i = op->ConstantInputsTensor();
+      const_inputs.insert(const_inputs.end(), const_i.begin(), const_i.end());
+    }
+    return const_inputs;
+  }
+
+GraphImpl::GraphImpl(ContextImpl* context, const CompileOption& options)
     : context_(context),
       graph_(vsi_nn_CreateGraph(context_->context(), 0, 0)),
-      tensor_placeholder_(nullptr) {}
+      tensor_placeholder_(nullptr),
+      options_(options){}
 
 GraphImpl::~GraphImpl() { vsi_nn_ReleaseGraph(&graph_); }
 
@@ -87,6 +98,15 @@ void GraphImpl::UpdateTensorConsumersMap(const std::shared_ptr<Tensor>& tensor,
   }
 }
 
+void GraphImpl::UpdateTensorProducerMap(const std::shared_ptr<Tensor>& tensor,
+                                         const Operation* op) {
+  for (const auto& added_op : op_vector_) {
+    if (added_op.get() == op) {
+      tensor_producer_[tensor] = added_op;
+    }
+  }
+}
+
 const std::vector<std::shared_ptr<Operation>> GraphImpl::GetConsumersOp(
     std::shared_ptr<Tensor> tensor) const {
   auto consumers = tensor_consumers_.find(tensor);
@@ -94,6 +114,17 @@ const std::vector<std::shared_ptr<Operation>> GraphImpl::GetConsumersOp(
     return consumers->second;
   } else {
     VSILOGD("Tensor has no consumers, may be graph output.");
+    return {};
+  }
+}
+
+std::shared_ptr<Operation> GraphImpl::GetProducerOp(
+    std::shared_ptr<Tensor> tensor)  {
+  auto producer = tensor_producer_.find(tensor);
+  if (tensor_producer_.end() != producer) {
+    return producer->second;
+  } else {
+    VSILOGD("Tensor has no producer, may be graph input.");
     return {};
   }
 }
@@ -110,6 +141,11 @@ std::shared_ptr<Tensor> GraphImpl::CreateTensor(const TensorSpec& spec,
   return std::make_shared<TensorImpl>(this, spec, dmafd);
 }
 
+std::shared_ptr<Tensor> GraphImpl::CreateIOTensor(const TensorSpec& spec,
+                                                void* data) {
+  return std::make_shared<TensorImpl>(this, spec, data);
+}
+
 std::shared_ptr<Tensor> GraphImpl::CreateTensorPlaceHolder() {
   if (!tensor_placeholder_) {
     tensor_placeholder_ = std::make_shared<TensorPlaceholder>(this);
@@ -118,7 +154,7 @@ std::shared_ptr<Tensor> GraphImpl::CreateTensorPlaceHolder() {
   return tensor_placeholder_;
 }
 
-bool GraphImpl::Compile() {
+bool GraphImpl::Setup() {
   bool status = true;
 
   auto major = vsi_nn_GetVersionMajor();
@@ -127,6 +163,13 @@ bool GraphImpl::Compile() {
 
   vsi_nn_SetGraphVersion(graph_, major, minor, patch);
 
+  bool is_fast_mode = options_.isRelaxMode();
+  if (is_fast_mode) {
+    VSILOGW("Important notice: float model executed in bfloat16 "
+            "mode which will have better performance but lower precesion");
+  }
+  vsi_nn_SetGraphFastMode(graph_, is_fast_mode);
+
   std::call_once(setio_once_, [&status, this]() {
     status = (vsi_nn_SetGraphInputs(this->graph_, this->inputs_.data(),
                                     this->inputs_.size()) &&
@@ -137,7 +180,13 @@ bool GraphImpl::Compile() {
   std::call_once(setup_once_, [&status, this]() {
     status = (VSI_SUCCESS == vsi_nn_SetupGraph(this->graph_, true));
   });
+  return status;
+}
 
+bool GraphImpl::Compile() {
+  bool status = true;
+
+  status = Setup();
   std::call_once(verify_graph_once_, [&status, this]() {
     status = (VSI_SUCCESS == vsi_nn_VerifyGraph(this->graph_));
   });
@@ -146,19 +195,7 @@ bool GraphImpl::Compile() {
 }
 
 bool GraphImpl::CompileToBinary(void* buf, size_t* size) {
-  bool status = true;
-  std::call_once(setio_once_, [&status, this]() {
-    status = (vsi_nn_SetGraphInputs(this->graph_, this->inputs_.data(),
-                                    this->inputs_.size()) &&
-              vsi_nn_SetGraphOutputs(this->graph_, this->outputs_.data(),
-                                     this->outputs_.size()));
-  });
-
-  std::call_once(setup_once_, [&status, this]() {
-    status = (VSI_SUCCESS == vsi_nn_SetupGraph(this->graph_, true));
-  });
-
-  return ((status) && (VSI_SUCCESS == vsi_nn_GenerateNBG(graph_, buf, size)));
+  return ((Setup()) && (VSI_SUCCESS == vsi_nn_GenerateNBG(graph_, buf, size)));
 }
 
 bool GraphImpl::Run() {

@@ -35,7 +35,6 @@
 #include "vsi_nn_tensor_util.h"
 #include "utils/vsi_nn_util.h"
 #include "kernel/vsi_nn_kernel.h"
-#include "libnnext/vx_lib_nnext.h"
 
 __BEGIN_DECLS
 
@@ -60,19 +59,6 @@ static vx_param_description_t _topk_kernel_param_def[] =
 };
 #define _TOPK_PARAM_NUM  _cnt_of_array( _topk_kernel_param_def )
 
-static uint32_t _max_comp_func(void* data, int32_t left, int32_t right)
-{
-    float* fdata = (float*)data;
-    if (fdata[left] >= fdata[right])
-    {
-        return TRUE;
-    }
-    else
-    {
-        return FALSE;
-    }
-}
-
 static void _find_top_k_1d
 (
     float* input,
@@ -81,37 +67,35 @@ static void _find_top_k_1d
     float* value,
     uint32_t* indices
 )
-{
-    int32_t low = 0;
-    int32_t high = input_len - 1;
-    int32_t j;
-
-    for (j = 0; j < (int32_t)input_len; j++)
+{   // Insertion sort
+    float insert_elem;
+    uint32_t position,index=0;
+    uint32_t i, j;
+    for (i = 0; i < input_len; i++)
     {
-        indices[j] = j;
-    }
-
-    j = vsi_nn_partition(input, low, high, _max_comp_func, FALSE, indices);
-
-    //part_sort
-    while (j != (int32_t)k)
-    {
-        if ((int32_t)k > j)
+        insert_elem = input[i];
+        // Record the position of the target element,
+        // and start traversing from this position forward
+        position = i;
+        index = position;
+        // Traverse forward from position to find the insertion position of the target element
+        while (position > 0 && input[position - 1] < insert_elem)
         {
-            low = j + 1;
+            // The element at position moves one position backward, index will also move with it
+            input[position] = input[position - 1];
+            indices[position] = indices[position - 1];
+            position--;
         }
-        else
+        // Insert and record the final position
+        if (position != i)
         {
-            high = j;
+            input[position] = insert_elem;
         }
-        j = vsi_nn_partition(input, low, high, _max_comp_func, FALSE, indices);
+        indices[position] = index;
     }
-    //all_sort
-    vsi_nn_partition(input, 0, k - 1, _max_comp_func, TRUE, indices);
-
-    for (j = 0; j < (int32_t)k; j++)
+    for (j = 0; j < k; j++)
     {
-        value[j] = input[indices[j]];
+        value[j] = input[j];
     }
 }
 
@@ -130,15 +114,15 @@ DEF_KERNEL_EXECUTOR(_compute)
     vsi_nn_kernel_tensor_t output[_OUTPUT_NUM] = {NULL};
     float *f32_in_buffer[_INPUT_NUM] = {NULL};
     float *f32_out_buffer[_OUTPUT_NUM] = {NULL};
-    vsi_nn_kernel_tensor_attr_t *in_attr[_INPUT_NUM];
-    vsi_nn_kernel_tensor_attr_t *out_attr[_OUTPUT_NUM];
+    vsi_nn_kernel_tensor_attr_t *in_attr[_INPUT_NUM] = {NULL};
+    vsi_nn_kernel_tensor_attr_t *out_attr[_OUTPUT_NUM] = {NULL};
     vsi_size_t   out_stride_size[_OUTPUT_NUM][VSI_NN_MAX_DIM_NUM] = {{1}};
     vsi_size_t   out_elements[_OUTPUT_NUM] = {0};
     vsi_size_t   out_bytes[_OUTPUT_NUM] = {0};
     uint32_t  i = 0;
     int32_t  j = 0;
     int32_t  top_k = 0;
-    uint32_t block_num = 0;
+    uint32_t block_num = 1;
     uint32_t block_size = 0;
     uint32_t * indices_ptr = NULL;
 
@@ -166,7 +150,11 @@ DEF_KERNEL_EXECUTOR(_compute)
     status = vsi_nn_kernel_scalar_read_int32( param[3], &top_k );
     CHECK_STATUS_FAIL_GOTO(status, final );
 
-    block_num = (uint32_t)in_attr[0]->shape->data[1];
+    for(i = (uint32_t)in_attr[0]->shape->size - 1; i > 0; i--)
+    {
+        block_num = block_num * (uint32_t)in_attr[0]->shape->data[i];
+    }
+
     block_size = (uint32_t)in_attr[0]->shape->data[0];
     indices_ptr = (uint32_t*)malloc(block_size * sizeof(uint32_t));
     CHECK_PTR_FAIL_GOTO( indices_ptr, "Create indices buffer fail.", final );
@@ -294,4 +282,3 @@ static vsi_nn_kernel_node_t _setup
 __END_DECLS
 
 REGISTER_BACKEND_CPU( topk, _setup )
-

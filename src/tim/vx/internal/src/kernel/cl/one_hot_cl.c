@@ -176,6 +176,10 @@ static vsi_status _query_kernel
     {
         in_dtype = F32;
     }
+    else if (in_dtype == I16 || in_dtype == I8)
+    {
+        in_dtype = I32;
+    }
 
     if (out_dtype == F16)
     {
@@ -239,8 +243,8 @@ static vsi_nn_kernel_node_t _setup
     float on_value = vsi_nn_kernel_param_get_float32( params, "on_value" );
     float off_value = vsi_nn_kernel_param_get_float32( params, "off_value" );
     int32_t axis = vsi_nn_kernel_param_get_int32( params, "axis" );
-    float inputScale = inputs[0]->attr.dtype.scale;
-    float inputTail = (float)inputs[0]->attr.dtype.zero_point * inputScale;
+    float inputScale = vsi_nn_get_tensor_scale(inputs[0]);
+    float inputTail = (float)vsi_nn_get_tensor_zero_point(inputs[0]) * inputScale;
 
     out_dtype = vsi_nn_kernel_map_dtype( outputs[0]->attr.dtype.vx_type );
 

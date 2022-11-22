@@ -27,17 +27,23 @@
 #include "vsi_nn_types.h"
 #include "vsi_nn_op_rnn.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* enum for inputs/outputs */
 enum
 {
     RNN_INPUT_INPUT        = 0,
     RNN_INPUT_WEIGHT_I     = 1,
     RNN_INPUT_WEIGHT_H     = 2,
-    RNN_INPUT_BIAS         = 3,
-    RNN_INPUT_H_STATE      = 4,
+    RNN_INPUT_BIAS_I       = 3,
+    RNN_INPUT_BIAS_H       = 4,
+    RNN_INPUT_H_STATE      = 5,
     RNN_INPUT_CNT,
 
-    RNN_OUTPUT_OUTPUT      = 0,
+    RNN_OUTPUT_H_STATE      = 0,
+    RNN_OUTPUT_OUTPUT      = 1,
     RNN_OUTPUT_CNT
 };
 
@@ -48,5 +54,8 @@ typedef struct _vsi_nn_unidirectional_sequence_rnn_param
     vsi_nn_dtype_t internal_dtype[RNNCELL_QUANTIZE_PARAM_COUNT];
 } vsi_nn_unidirectional_sequence_rnn_param;
 
+#ifdef __cplusplus
+}
 #endif
 
+#endif

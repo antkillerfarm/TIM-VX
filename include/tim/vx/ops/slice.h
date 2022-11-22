@@ -23,7 +23,7 @@
 *****************************************************************************/
 #ifndef TIM_VX_OPS_SLICE_H_
 #define TIM_VX_OPS_SLICE_H_
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -38,19 +38,22 @@ namespace ops {
  * - length : the size of the slice in each dimension.
  */
 
-class Slice : public Operation {
+class Slice : public BuiltinOp {
  public:
-  Slice(Graph* graph,
-        uint32_t dims,
-        const std::vector<int32_t>& start,
+  Slice(Graph* graph, uint32_t dims, const std::vector<int32_t>& start,
         const std::vector<int32_t>& length);
+  Slice(Graph* graph, uint32_t dims, const std::vector<int32_t>& start,
+        const std::vector<int32_t>& length, const std::vector<int32_t>& step);
 
-  std::shared_ptr<Operation> Clone(std::shared_ptr<Graph>& graph) const override;
+  std::shared_ptr<Operation> Clone(
+      std::shared_ptr<Graph>& graph) const override;
 
  protected:
   uint32_t dims_;
   const std::vector<int32_t> start_;
   const std::vector<int32_t> length_;
+  std::vector<int32_t> end_dims_;
+  const std::vector<int32_t> step_;
 };
 
 }  // namespace ops

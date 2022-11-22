@@ -62,10 +62,11 @@ KERNEL_SELECTOR( depthwise_conv1d )
     vsi_size_t real_kernel = 0;
     int32_t stride = vsi_nn_kernel_param_get_int32( params, "stride" );
     vsi_nn_kernel_pirority_t pirority[] = {
-        { VSI_NN_KERNEL_TYPE_VX,    0 },
-        { VSI_NN_KERNEL_TYPE_EVIS,  3 },
-        { VSI_NN_KERNEL_TYPE_CL,    2 },
-        { VSI_NN_KERNEL_TYPE_CPU,   1 },
+        { VSI_NN_KERNEL_TYPE_VX,    1 },
+        { VSI_NN_KERNEL_TYPE_SP,    0 },
+        { VSI_NN_KERNEL_TYPE_EVIS,  4 },
+        { VSI_NN_KERNEL_TYPE_CL,    3 },
+        { VSI_NN_KERNEL_TYPE_CPU,   2 },
         };
     dilation = dilation == 0 ? 0 : dilation - 1;
     real_kernel = (kernel - 1) * dilation + kernel;
@@ -94,6 +95,7 @@ static vsi_status _select
     )
 {
     vsi_nn_kernel_pirority_t pirority[] = {
+        { VSI_NN_KERNEL_TYPE_SP,    4 },
         { VSI_NN_KERNEL_TYPE_VX,    3 },
         { VSI_NN_KERNEL_TYPE_EVIS,  2 },
         { VSI_NN_KERNEL_TYPE_CL,    1 },
@@ -120,7 +122,7 @@ static vsi_status _select
 
 REGISTER_VX_FIRST_KERNEL_SELECTOR(exp)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(log)
-REGISTER_VX_FIRST_KERNEL_SELECTOR(elu)
+REGISTER_VX_FIRST_KERNEL_SELECTOR(selu)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(neg)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(mish)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(hard_sigmoid)
@@ -130,5 +132,10 @@ REGISTER_VX_FIRST_KERNEL_SELECTOR(erf)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(gelu)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(hard_gelu)
 REGISTER_VX_FIRST_KERNEL_SELECTOR(matrixmul)
+REGISTER_VX_FIRST_KERNEL_SELECTOR(celu)
+REGISTER_VX_FIRST_KERNEL_SELECTOR(rcp)
+REGISTER_VX_FIRST_KERNEL_SELECTOR(softsign)
+REGISTER_VX_FIRST_KERNEL_SELECTOR(resize_bilinear)
+REGISTER_VX_FIRST_KERNEL_SELECTOR(resize_nearest)
 
 __END_DECLS

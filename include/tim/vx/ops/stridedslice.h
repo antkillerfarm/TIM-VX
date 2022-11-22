@@ -23,7 +23,7 @@
 *****************************************************************************/
 #ifndef TIM_VX_OPS_STRIDEDSLICE_H_
 #define TIM_VX_OPS_STRIDEDSLICE_H_
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -32,7 +32,7 @@ namespace ops {
 /**
  * ## StridedSlice
  *
- * Extracts a strided slice of a tensor.
+ * Extracts a strided slice of a tensor.Same as tensorflow.
  *
  * Roughly speaking, this op extracts a slice of size (end - begin) / stride from
  * the given input tensor. Starting at the location specified by begin the slice
@@ -52,7 +52,7 @@ namespace ops {
  * e.g. begin[i] = x, end[i] = x + 1.
  */
 
-class StridedSlice : public Operation {
+class StridedSlice : public BuiltinOp {
  public:
   StridedSlice(Graph* graph, const std::vector<int32_t> begin_dims,
                const std::vector<int32_t> end_dims,

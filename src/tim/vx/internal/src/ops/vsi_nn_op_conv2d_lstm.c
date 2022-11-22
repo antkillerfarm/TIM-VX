@@ -35,7 +35,7 @@
 #include "vsi_nn_ops.h"
 #include "vsi_nn_tensor.h"
 #include "vsi_nn_tensor_util.h"
-#include "libnnext/vsi_nn_vxkernel.h"
+#include "vsi_nn_error.h"
 #include "vsi_nn_internal_node.h"
 #include "vsi_nn_rnn_helper.h"
 
@@ -56,7 +56,7 @@ static vsi_nn_internal_tensor_t * reshape_cell_out
     output_tensor = vsi_nn_internal_new_tensor( self, &attr, 0.0f );
 
     /* reshape cell_out [w,h,c,n] to [w,h,c,1,n] */
-    curr = vsi_nn_internal_new_node( self, VSI_NN_OP_RESHAPE, 0, 0 );
+    curr = vsi_nn_internal_new_node( self, VSI_NN_OP_RESHAPE2, 0, 0 );
     reshape_cell_size = vsi_nn_internal_new_node_param(curr,
         VSI_NN_MAX_DIM_NUM * sizeof(vsi_size_t));
     reshape_cell_size[0] = cell_out->attr.size[0];
@@ -64,8 +64,8 @@ static vsi_nn_internal_tensor_t * reshape_cell_out
     reshape_cell_size[2] = cell_out->attr.size[2];
     reshape_cell_size[3] = 1;
     reshape_cell_size[4] = cell_out->attr.size[3];
-    curr->node->nn_param.reshape.size = reshape_cell_size;
-    curr->node->nn_param.reshape.dim_num = 5;
+    curr->node->nn_param.reshape2.size = reshape_cell_size;
+    curr->node->nn_param.reshape2.dim_num = 5;
 
     curr->inputs[0] = cell_out;
     curr->outputs[0] = output_tensor->t;
@@ -90,15 +90,15 @@ static vsi_nn_internal_tensor_t * reshape_split_out
     output_tensor = vsi_nn_internal_new_tensor( self, &attr, 0.0f );
 
     /* reshape [w,h,c,t,n] to [w,h,c,n] */
-    curr = vsi_nn_internal_new_node( self, VSI_NN_OP_RESHAPE, 0, 0 );
+    curr = vsi_nn_internal_new_node( self, VSI_NN_OP_RESHAPE2, 0, 0 );
     reshape_split_size = vsi_nn_internal_new_node_param(curr,
         VSI_NN_MAX_DIM_NUM * sizeof(vsi_size_t));
     reshape_split_size[0] = split_out->attr.size[0];
     reshape_split_size[1] = split_out->attr.size[1];
     reshape_split_size[2] = split_out->attr.size[2];
     reshape_split_size[3] = split_out->attr.size[4];
-    curr->node->nn_param.reshape.size = reshape_split_size;
-    curr->node->nn_param.reshape.dim_num = 4;
+    curr->node->nn_param.reshape2.size = reshape_split_size;
+    curr->node->nn_param.reshape2.dim_num = 4;
 
     curr->inputs[0] = split_out;
     curr->outputs[0] = output_tensor->t;
@@ -515,7 +515,9 @@ static vsi_bool op_setup
     trans_input_tensor(self, inputs, trans_inputs);
 
     split_outputs = (vsi_nn_tensor_t **)malloc(sizeof(vsi_nn_tensor_t *) * timestep);
+    CHECK_PTR_FAIL_GOTO( split_outputs, "Create buffer fail.", final );
     conv2dlstm_step_outputs = (vsi_nn_tensor_t **)malloc(sizeof(vsi_nn_tensor_t *) * timestep);
+    CHECK_PTR_FAIL_GOTO( conv2dlstm_step_outputs, "Create buffer fail.", final );
     memset(split_outputs, 0, sizeof(vsi_nn_tensor_t *) * timestep);
     memset(conv2dlstm_step_outputs, 0, sizeof(vsi_nn_tensor_t *) * timestep);
 
@@ -636,6 +638,7 @@ static vsi_bool op_setup
         trans_output_tensor(self, conv2dlstm_outputs, outputs);
     }
 
+final:
     vsi_nn_safe_free(split_outputs);
     vsi_nn_safe_free(conv2dlstm_step_outputs)
     return TRUE;

@@ -23,7 +23,7 @@
 *****************************************************************************/
 #ifndef TIM_VX_OPS_ELEMENTWISE_H_
 #define TIM_VX_OPS_ELEMENTWISE_H_
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -67,7 +67,7 @@ namespace ops {
  */
 
 #define DECLARE_ELEMENTWISE_OP(NAME)                   \
-  class NAME : public Operation {                      \
+  class NAME : public BuiltinOp {                      \
    public:                                             \
     NAME(Graph* graph);                                \
     std::shared_ptr<Operation> Clone(                  \
@@ -81,14 +81,14 @@ DECLARE_ELEMENTWISE_OP(Sub)
 DECLARE_ELEMENTWISE_OP(Pow)
 DECLARE_ELEMENTWISE_OP(FloorDiv)
 
-class Multiply : public Operation {
+class Multiply : public BuiltinOp {
  public:
   Multiply(Graph* graph, float scale = 1.0f);
 
   std::shared_ptr<Operation> Clone(std::shared_ptr<Graph>& graph) const override;
 };
 
-class Div : public Operation {
+class Div : public BuiltinOp {
  public:
   Div(Graph* graph, float scale = 1.0f);
 

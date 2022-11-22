@@ -23,14 +23,14 @@
 *****************************************************************************/
 #include "tim/vx/ops/instancenormalization.h"
 
-#include "operation_private.h"
+#include "builtin_op_impl.h"
 #include "vsi_nn_pub.h"
 
 namespace tim {
 namespace vx {
 namespace ops {
 InstanceNormalization::InstanceNormalization(Graph* graph, float eps)
-    : Operation(graph, VSI_NN_OP_INSTANCE_NORM), eps_(eps) {
+    : BuiltinOp(graph, VSI_NN_OP_INSTANCE_NORM), eps_(eps) {
   this->impl()->node()->nn_param.instancenorm.eps = eps_;
 }
 

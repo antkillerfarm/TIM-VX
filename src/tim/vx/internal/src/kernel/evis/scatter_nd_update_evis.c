@@ -35,7 +35,6 @@
 #include "vsi_nn_error.h"
 #include "utils/vsi_nn_util.h"
 #include "kernel/vsi_nn_kernel.h"
-#include "libnnext/vx_lib_nnext.h"
 
 __BEGIN_DECLS
 
@@ -98,7 +97,9 @@ static const _kernel_map_type scatter_nd_update_map[] =
     TENSOR_SCATTER_ND_UPDATE_KERNELS(U8,   I32, U8,   F16,    KERNEL_SOURCE_1)
     TENSOR_SCATTER_ND_UPDATE_KERNELS(I8,   I32, I8,   F16,    KERNEL_SOURCE_1)
     TENSOR_SCATTER_ND_UPDATE_KERNELS(I16,  I32, I16,  F16,    KERNEL_SOURCE_1)
+    TENSOR_SCATTER_ND_UPDATE_KERNELS(F16,  I32, F16,  U8,     KERNEL_SOURCE_1)
     TENSOR_SCATTER_ND_UPDATE_BIG_KERNELS(F16, I32, F16, F16,  KERNEL_SOURCE_2)
+    TENSOR_SCATTER_ND_UPDATE_BIG_KERNELS(F16, I32, F16, U8,   KERNEL_SOURCE_2)
 };
 
 static const _kernel_map_type scatter_nd_update_reset_map[] =
@@ -206,7 +207,7 @@ static vsi_status get_scatter_nd_update_tensor_reshape_size
         return status;
     }
 
-#define VSI_NN_MAX_IMAGE_WIDTH  (65536)
+#define VSI_NN_MAX_IMAGE_WIDTH  GPU_TENSOR_MAX_WIDTH
 
     newDim[0] = 0;
     for(i = 0; i < dims_num; ++i)
@@ -330,12 +331,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_initializer)
         {
             src0Scale = ((float) ((int64_t)1 << -attr[0]->dfp.fl));
         }
-        src0ZP = 0;
-    }
-    else if ( attr[0]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src0Scale = 1;
-        src0ZP = 0;
     }
 
     if (attr[2]->quant == VSI_NN_KERNEL_QUANT_ASYMM)
@@ -353,12 +348,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_initializer)
         {
             src2Scale = ((float) ((int64_t)1 << -attr[2]->dfp.fl));
         }
-        src2ZP = 0;
-    }
-    else if ( attr[2]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src2Scale = 1;
-        src2ZP = 0;
     }
 
     if (attr[3]->quant == VSI_NN_KERNEL_QUANT_ASYMM)
@@ -377,12 +366,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_initializer)
             dstScale = (1.0f / (float)((int64_t)1 << -attr[3]->dfp.fl));
         }
         dstScale = 1.0f/dstScale;
-        dstZP = 0;
-    }
-    else if ( attr[3]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        dstScale = 1;
-        dstZP = 0;
     }
 
     if (coord_dim == 5)
@@ -621,12 +604,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_big_initializer)
         {
             src0Scale = ((float) ((int64_t)1 << -attr[0]->dfp.fl));
         }
-        src0ZP = 0;
-    }
-    else if ( attr[0]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src0Scale = 1;
-        src0ZP = 0;
     }
 
     if (attr[2]->quant == VSI_NN_KERNEL_QUANT_ASYMM)
@@ -644,12 +621,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_big_initializer)
         {
             src2Scale = ((float) ((int64_t)1 << -attr[2]->dfp.fl));
         }
-        src2ZP = 0;
-    }
-    else if ( attr[2]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src2Scale = 1;
-        src2ZP = 0;
     }
 
     if (attr[3]->quant == VSI_NN_KERNEL_QUANT_ASYMM)
@@ -667,13 +638,7 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_big_initializer)
         {
             dstScale = (1.0f / (float)((int64_t)1 << -attr[3]->dfp.fl));
         }
-        dstScale = 1.0f/dstScale;
-        dstZP = 0;
-    }
-    else if ( attr[3]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        dstScale = 1;
-        dstZP = 0;
+        dstScale = 1.0f / dstScale;
     }
 
     if (coord_dim == 5)
@@ -766,7 +731,7 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_big_initializer)
 
         status = vsi_nn_kernel_gpu_add_param( node,
                     "uniAccumulateSum_2x8", &uniAccumulateSum_2x8 );
-        if (attr[2]->quant != VSI_NN_KERNEL_QUANT_NONE)
+        if (attr[3]->quant != VSI_NN_KERNEL_QUANT_NONE)
         {
             status |= vsi_nn_kernel_gpu_add_param( node,
                 "uniU8MulAndPostShift_0_Lo_2x8", &uniU8MulAndPostShift_0_Lo_2x8 );
@@ -871,12 +836,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_pre_initializer)
         {
             src0Scale = ((float) ((int64_t)1 << -attr[1]->dfp.fl));
         }
-        src0ZP = 0;
-    }
-    else if ( attr[1]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src0Scale = 1;
-        src0ZP = 0;
     }
 
     if (coord_dim == 5)
@@ -1027,12 +986,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_post_initializer)
         {
             src0Scale = ((float) ((int64_t)1 << -attr[0]->dfp.fl));
         }
-        src0ZP = 0;
-    }
-    else if ( attr[0]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src0Scale = 1;
-        src0ZP = 0;
     }
 
     if (attr[1]->quant == VSI_NN_KERNEL_QUANT_ASYMM)
@@ -1050,10 +1003,6 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_post_initializer)
             src2Scale = ((float) ((int64_t)1 << -attr[1]->dfp.fl));
         }
     }
-    else if ( attr[1]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        src2Scale = 1;
-    }
 
     if (attr[2]->quant == VSI_NN_KERNEL_QUANT_ASYMM)
     {
@@ -1070,12 +1019,7 @@ DEF_KERNEL_INITIALIZER(_scatter_nd_update_post_initializer)
         {
             dstScale = (1.0f / (float)((int64_t)1 << -attr[2]->dfp.fl));
         }
-        dstScale = 1.0f/dstScale;
-        dstZP = 0;
-    }
-    else if ( attr[2]->quant == VSI_NN_KERNEL_QUANT_NONE )
-    {
-        dstScale = 1;
+        dstScale = 1.0f / dstScale;
         dstZP = 0;
     }
 
@@ -1600,4 +1544,3 @@ static vsi_nn_kernel_node_t _setup
 __END_DECLS
 
 REGISTER_BACKEND_EVIS( scatter_nd_update, _setup )
-

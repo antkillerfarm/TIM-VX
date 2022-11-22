@@ -35,7 +35,6 @@
 #include "vsi_nn_error.h"
 #include "utils/vsi_nn_util.h"
 #include "kernel/vsi_nn_kernel.h"
-#include "libnnext/vx_lib_nnext.h"
 #include "kernel/vsi_nn_kernel_gpu_shape_optimize.h"
 
 __BEGIN_DECLS
@@ -480,6 +479,7 @@ static vsi_nn_kernel_node_t _setup
     }
 
     kernel_preprocess = vsi_nn_kernel_create( VSI_NN_KERNEL_TYPE_EVIS );
+    CHECK_PTR_FAIL_GOTO( kernel_preprocess, "Create kernel fail.", final );
     // Assign unique_id
     kernel_preprocess->unique_id = kernel->unique_id;
 
@@ -525,7 +525,7 @@ static vsi_nn_kernel_node_t _setup
             border.constant_value.S32 = 0;
             if (inputs[0]->attr.dtype.vx_type == VSI_NN_TYPE_UINT8)
             {
-                border.constant_value.U8 = (vx_uint8)inputs[0]->attr.dtype.zero_point;
+                border.constant_value.U8 = (uint8_t)vsi_nn_get_tensor_zero_point(inputs[0]);
             }
             status = vxSetNodeAttribute( (vx_node)tmp_node, VX_NODE_BORDER, &border, sizeof(border) );
             CHECK_STATUS(status);
@@ -606,4 +606,3 @@ final:
 __END_DECLS
 
 REGISTER_BACKEND_EVIS( repeat, _setup )
-

@@ -66,6 +66,11 @@ static vsi_status op_compute
     vsi_nn_grouped_conv2d_param *nn_param = &self->nn_param.grouped_conv2d;
     nn_param->local = (vsi_nn_grouped_conv2d_param_local_data*)malloc(
         sizeof(vsi_nn_grouped_conv2d_param_local_data));
+    if (NULL == nn_param->local)
+    {
+        VSILOGE("Malloc fail, (GROUPED_CONV2D) at [%s : %d]\n", __FILE__, __LINE__);
+        return VSI_FAILURE;
+    }
     memset(nn_param->local, 0, sizeof(vsi_nn_grouped_conv2d_param_local_data));
     /* TODO */
     /* example code : add op */
@@ -167,6 +172,7 @@ static vsi_status op_compute
 
         p_ext->padding_x_right = self->nn_param.conv2d.pad[1];
         p_ext->padding_y_bottom = self->nn_param.conv2d.pad[3];
+        p_ext->pad_mode = vsi_nn_get_vx_pad_mode(nn_param->pad_mode);
 
         //set ext2 relative parameters
         p_ext2->depth_multiplier = self->nn_param.conv2d.multiplier;
@@ -195,6 +201,12 @@ static vsi_status op_compute
         {
             VSILOGE("Add vxConvolutionLayer fail, (GROUPED_CONV2D) at [%s : %d]\n", __FILE__, __LINE__);
             return VSI_FAILURE;
+        }
+        else
+        {
+            // no need to maintain self->n
+            vxReleaseNode( &self->n );
+            self->n = NULL;
         }
     }
     return VSI_SUCCESS;

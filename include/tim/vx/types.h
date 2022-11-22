@@ -35,12 +35,13 @@ enum class DataType {
   UINT16,
   INT32,
   UINT32,
+  INT64,
   FLOAT16,
   FLOAT32,
   BOOL8
 };
 
-enum class QuantType { NONE, ASYMMETRIC, SYMMETRIC_PER_CHANNEL };
+enum class QuantType { NONE, ASYMMETRIC, SYMMETRIC_PER_CHANNEL, DYNAMIC_FIXED_POINT };
 
 enum TensorAttribute {
   CONSTANT = 1 << 0,
@@ -63,12 +64,19 @@ enum class RoundingPolicy { TO_ZERO, RTNE };
 enum class ResizeType { NEAREST_NEIGHBOR, BILINEAR, AREA };
 
 enum class DataLayout {
+  ANY,
   WHCN,
   CWHN,
-  ANY,
-  IcWHOc /*TF*/,
-  OcIcWH /*TVM*/,
-  WHIcOc /*TIM-VX default*/
+  IcWHOc, /*TF*/
+  OcIcWH, /*TVM for classic conv2d in tflite model*/
+  IcOcWH, /*TVM for depthwise conv2d in tflite model*/
+  WHIcOc, /*TIM-VX default*/
+  WCN,   /*for conv1d*/
+  WIcOc, /*for conv1d*/
+  WHDCN, /* pytorch conv3d input */
+  WHDIcOc, /* pytorch conv3d kernel */
+  CWHDN, /* tensorflow conv3d input */
+  OcIcWHD, /* tensorflow conv3d kernel */
 };
 
 }  // namespace vx

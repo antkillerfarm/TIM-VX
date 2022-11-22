@@ -32,7 +32,6 @@
 #include "vsi_nn_prv.h"
 #include "vsi_nn_error.h"
 #include "kernel/vsi_nn_kernel.h"
-#include "libnnext/vsi_nn_vxkernel.h"
 
 __BEGIN_DECLS
 
@@ -53,14 +52,26 @@ static vsi_ssize_t _expand_offset
     vsi_size_t i;
     vsi_ssize_t offset = 0;
 
-    for( i = 0; i < rank && index; i ++ )
+    for  ( i = 0; i < rank && index; i ++ )
     {
-        if( shape[i] == out_shape[i] )
+        if (strides[0] == 0)
+        {
+            if (i == 0)
+            {
+                offset += (index % out_shape[0]);
+            }
+            else
+            {
+                offset += (vsi_ssize_t)strides[i] * 2 * ( index % out_shape[i] );
+            }
+        }
+        else if ( shape[i] == out_shape[i] )
         {
             offset += (vsi_ssize_t)strides[i] * ( index % out_shape[i] );
         }
         index /= out_shape[i];
     }
+
     return offset;
 }
 
@@ -143,21 +154,6 @@ static vx_param_description_t kernel_param_def[] =
     {VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED}
 };
 
-
-static const vx_kernel_description_t _kernel_info =
-{
-    KERNEL_ID_PLACEHOLDER,
-    _KERNEL_NAME,
-    _minimum_exec,
-    kernel_param_def,
-    _cnt_of_array( kernel_param_def ),
-    vsi_nn_KernelValidator,
-    NULL,
-    NULL,
-    vsi_nn_KernelInitializer,
-    vsi_nn_KernelDeinitializer
-};
-
 static vsi_status _query_kernel
     (
     vsi_nn_tensor_t* const* const inputs,
@@ -165,7 +161,11 @@ static vsi_status _query_kernel
     vsi_nn_kernel_t* kernel
     )
 {
-    memmove( &kernel->info, &_kernel_info, sizeof(vx_kernel_description_t) );
+    snprintf( kernel->info.name, VX_MAX_KERNEL_NAME, "%s",  _KERNEL_NAME );
+    kernel->info.function    = _minimum_exec;
+    kernel->info.parameters  = kernel_param_def;
+    kernel->info.numParams   = _cnt_of_array( kernel_param_def );
+
     return VSI_SUCCESS;
 } /* _query_kernel() */
 
@@ -207,4 +207,3 @@ static vsi_nn_kernel_node_t _setup
 __END_DECLS
 
 REGISTER_BACKEND_CPU( minimum, _setup )
-

@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <vector>
+
 namespace tim {
 namespace vx {
 
@@ -44,6 +45,12 @@ class Graph {
 
   virtual std::shared_ptr<Tensor> CreateTensor(const TensorSpec& spec,
                                                const DmaBufferDesc& dmafd) = 0;
+
+  /// Create a tensor with given `TensorSpec`.
+  /// spec.attr_ must be TensorAttribute::Input or Output
+  virtual std::shared_ptr<Tensor> CreateIOTensor(const TensorSpec& spec,
+                                               void* data = nullptr) = 0;
+
   /// Create a placeholder tensor for optional inputs of operations
   virtual std::shared_ptr<Tensor> CreateTensorPlaceHolder() = 0;
 
@@ -69,10 +76,19 @@ class Graph {
       const std::shared_ptr<Tensor>& tensor,
       const Operation* op) = 0;
 
+  virtual void UpdateTensorProducerMap(
+      const std::shared_ptr<Tensor>& tensor,
+      const Operation* op) = 0;
+
   virtual const std::vector<std::shared_ptr<Operation>> GetConsumersOp(
       std::shared_ptr<Tensor> tensor) const = 0;
 
+  virtual std::shared_ptr<Operation> GetProducerOp(
+      std::shared_ptr<Tensor> tensor) = 0;
+
   virtual void PrintGraph() const = 0;
+
+  const std::vector<std::shared_ptr<Tensor>> GetConstantInputs() const;
 
  protected:
   std::vector<std::shared_ptr<tim::vx::Operation>> op_vector_;

@@ -38,6 +38,14 @@
 #include "kernel/vsi_nn_kernel_eltwise.h"
 #include "utils/vsi_nn_constraint_check.h"
 
+vsi_bool vsi_nn_kernel_is_supported_types
+    (
+    vsi_nn_tensor_t** inputs,
+    size_t input_num,
+    vsi_nn_tensor_t** outputs,
+    size_t output_num
+    );
+
 static vsi_status _eltwise_op_compute
     (
     const char * kernel_name,
@@ -53,16 +61,26 @@ static vsi_status _eltwise_op_compute
     vsi_bool ret = TRUE;
     vx_bool doShapeOptimized = TRUE;
     vsi_nn_kernel_param_t * param = NULL;
+    vsi_nn_context_t   ctx = NULL;
+    vsi_bool is_executed_on_sh = FALSE;
 
-    if( NULL == self )
+    if ( NULL == self )
     {
         return VSI_FAILURE;
     }
     status = VSI_FAILURE;
 
+    ctx = self->graph->ctx;
+
+    is_executed_on_sh = vsi_nn_kernel_is_supported_types(inputs, 2, outputs, 1) &&
+        !ctx->config.support_stream_processor;
+
     if ( strcmp(kernel_name, "sub") == 0
       || strcmp(kernel_name, "add") == 0
-      || strcmp(kernel_name, "mul") == 0 )
+      || strcmp(kernel_name, "mul") == 0
+      || (strcmp(kernel_name, "maximum") == 0 && !is_executed_on_sh)
+      || (strcmp(kernel_name, "minimum") == 0 && !is_executed_on_sh)
+      || (strcmp(kernel_name, "div") == 0 && !is_executed_on_sh))
     {
         doShapeOptimized = FALSE;
 
@@ -184,7 +202,6 @@ vsi_bool vsi_nn_op_eltwise_setup
     return ret;
 } /* vsi_nn_op_eltwise_setup() */
 
-
 static vsi_bool op_check_minimum
     (
     vsi_nn_node_t * self,
@@ -194,32 +211,61 @@ static vsi_bool op_check_minimum
 {
     /* check inputs outputs data type */
     BEGIN_IO_TYPE_DECL(MINIMUM, 2, 1)
-        IO_TYPE(D_F16,  D_F16,  D_F16)
-        IO_TYPE(D_F16,  D_F16,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,  D_F16,  D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_F16,  D_U8|Q_ASYM)
-
-        IO_TYPE(D_F16,  D_I16|Q_DFP,  D_F16)
-        IO_TYPE(D_F16,  D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,  D_I8|Q_DFP,   D_F16)
-        IO_TYPE(D_F16,  D_I8|Q_DFP,   D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM,  D_U8|Q_ASYM)
-
-        IO_TYPE(D_I16|Q_DFP, D_F16, D_F16)
-        IO_TYPE(D_I16|Q_DFP, D_F16, D_I16|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,  D_F16, D_F16)
-        IO_TYPE(D_I8|Q_DFP,  D_F16, D_I8|Q_DFP)
-        IO_TYPE(D_U8|Q_ASYM, D_F16, D_F16)
-        IO_TYPE(D_U8|Q_ASYM, D_F16, D_U8|Q_ASYM)
-
-        IO_TYPE(D_I16|Q_DFP, D_I16|Q_DFP, D_I16|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,  D_I8|Q_DFP,  D_I8|Q_DFP)
-        IO_TYPE(D_U8|Q_ASYM, D_U8|Q_ASYM, D_U8|Q_ASYM)
-
-        IO_TYPE(D_BF16, D_BF16, D_BF16)
-        IO_TYPE(D_F32,  D_F32,  D_F32)
-        IO_TYPE(D_I32,  D_I32,  D_I32)
+        IO_TYPE(D_F16,          D_F16,          D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_BF16,         D_BF16,         D_BF16)
+        IO_TYPE(D_F32,          D_F32,          D_F32)
+        IO_TYPE(D_I32,          D_I32,          D_I32)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_I16|Q_SYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_ASYM,    D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_ASYM,   D_I16|Q_SYM)
     END_IO_TYPE_DECL(MINIMUM)
     if(!VALIDATE_OP_IO_TYPES(MINIMUM, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
@@ -241,32 +287,61 @@ static vsi_bool op_check_maximum
 {
     /* check inputs outputs data type */
     BEGIN_IO_TYPE_DECL(MAXIMUM, 2, 1)
-        IO_TYPE(D_F16,  D_F16,  D_F16)
-        IO_TYPE(D_F16,  D_F16,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,  D_F16,  D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_F16,  D_U8|Q_ASYM)
-
-        IO_TYPE(D_F16,  D_I16|Q_DFP,  D_F16)
-        IO_TYPE(D_F16,  D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,  D_I8|Q_DFP,   D_F16)
-        IO_TYPE(D_F16,  D_I8|Q_DFP,   D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM,  D_U8|Q_ASYM)
-
-        IO_TYPE(D_I16|Q_DFP, D_F16, D_F16)
-        IO_TYPE(D_I16|Q_DFP, D_F16, D_I16|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,  D_F16, D_F16)
-        IO_TYPE(D_I8|Q_DFP,  D_F16, D_I8|Q_DFP)
-        IO_TYPE(D_U8|Q_ASYM, D_F16, D_F16)
-        IO_TYPE(D_U8|Q_ASYM, D_F16, D_U8|Q_ASYM)
-
-        IO_TYPE(D_I16|Q_DFP, D_I16|Q_DFP, D_I16|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,  D_I8|Q_DFP,  D_I8|Q_DFP)
-        IO_TYPE(D_U8|Q_ASYM, D_U8|Q_ASYM, D_U8|Q_ASYM)
-
-        IO_TYPE(D_BF16, D_BF16, D_BF16)
-        IO_TYPE(D_F32,  D_F32,  D_F32)
-        IO_TYPE(D_I32,  D_I32,  D_I32)
+        IO_TYPE(D_F16,          D_F16,          D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_BF16,         D_BF16,         D_BF16)
+        IO_TYPE(D_F32,          D_F32,          D_F32)
+        IO_TYPE(D_I32,          D_I32,          D_I32)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_I16|Q_SYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_ASYM,    D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_ASYM,   D_I16|Q_SYM)
     END_IO_TYPE_DECL(MAXIMUM)
     if(!VALIDATE_OP_IO_TYPES(MAXIMUM, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
@@ -288,30 +363,63 @@ static vsi_bool op_check_pow
 {
     /* check inputs outputs data type */
     BEGIN_IO_TYPE_DECL(POW, 2, 1)
-        IO_TYPE(D_F16,  D_F16,  D_F16)
-        IO_TYPE(D_BF16, D_BF16, D_BF16)
-        IO_TYPE(D_F16,  D_F16,  D_U8|Q_ASYM)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_F16,  D_F16,  D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_I8|Q_DFP,  D_F16)
-        IO_TYPE(D_F16,  D_I8|Q_DFP,  D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_F16,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,  D_I16|Q_DFP,  D_F16)
-        IO_TYPE(D_F16,  D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_U8|Q_ASYM,  D_F16,  D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_F16,  D_U8|Q_ASYM)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_I8|Q_DFP,  D_F16,  D_F16)
-        IO_TYPE(D_I8|Q_DFP,  D_F16,  D_I8|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,  D_I8|Q_DFP,  D_I8|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_F16,  D_F16)
-        IO_TYPE(D_I16|Q_DFP,  D_F16,  D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_F32,  D_F32,  D_F32)
+        IO_TYPE(D_F16,          D_F16,          D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_BF16,         D_BF16,         D_BF16)
+        IO_TYPE(D_F32,          D_F32,          D_F32)
+        IO_TYPE(D_I32,          D_I32,          D_I32)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_I16|Q_SYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_ASYM,    D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_ASYM,   D_I16|Q_SYM)
     END_IO_TYPE_DECL(POW)
-    if(!VALIDATE_OP_IO_TYPES(POW, self, inputs, self->input.num, outputs, self->output.num)) {
+    if (!VALIDATE_OP_IO_TYPES(POW, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
                 self->input.num, outputs, self->output.num);
         VSILOGE("Inputs/Outputs data type not support: %s", desc);
@@ -321,7 +429,6 @@ static vsi_bool op_check_pow
 
     return TRUE;
 } /* op_check() */
-
 
 static vsi_bool op_check_add
     (
@@ -337,30 +444,56 @@ static vsi_bool op_check_add
         IO_TYPE(D_BF16,         D_BF16,         D_F32)
         IO_TYPE(D_F16,          D_F16,          D_F16)
         IO_TYPE(D_F16,          D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_SYM)
         IO_TYPE(D_F16,          D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_SYM)
         IO_TYPE(D_F16,          D_F16,          D_U8|Q_ASYM)
         IO_TYPE(D_F16,          D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_F16)
         IO_TYPE(D_F16,          D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_F16)
         IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_F16)
         IO_TYPE(D_F16,          D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_I16|Q_SYM)
         IO_TYPE(D_F16,          D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_I8|Q_SYM)
         IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_U8|Q_ASYM)
         IO_TYPE(D_I16|Q_DFP,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_F16)
         IO_TYPE(D_I8|Q_DFP,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_F16)
         IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_F16)
         IO_TYPE(D_I16|Q_DFP,    D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_I16|Q_SYM)
         IO_TYPE(D_I8|Q_DFP,     D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_I8|Q_SYM)
         IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_U8|Q_ASYM)
         IO_TYPE(D_I8|Q_DFP,     D_I16|Q_DFP,    D_I16|Q_DFP)
         IO_TYPE(D_I8|Q_DFP,     D_I16|Q_DFP,    D_I8|Q_DFP)
         IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_F16)
         IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I16|Q_DFP)
         IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_I8|Q_SYM)
         IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_U8|Q_ASYM)
         IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_I16|Q_DFP)
-        IO_TYPE(D_I16,          D_I16|Q_DFP,    D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,    D_I16,          D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_I16|Q_SYM)
         IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_F16)
         IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_U8|Q_ASYM)
         IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_F16)
         IO_TYPE(D_U8|Q_ASYM,    D_I16|Q_DFP,    D_U8|Q_ASYM)
@@ -430,8 +563,14 @@ static vsi_bool op_check_add
         IO_TYPE(D_F32,          D_BF16,         D_BF16)
         IO_TYPE(D_F32,          D_BF16,         F32)
 
+        /* HW 9.1.1 */
+        IO_TYPE(D_U4|Q_ASYM,    D_U4|Q_ASYM,    D_U4|Q_ASYM)
+        IO_TYPE(D_U4|Q_SYM,     D_U4|Q_SYM,     D_U4|Q_SYM)
+        IO_TYPE(D_I4|Q_ASYM,    D_I4|Q_ASYM,    D_I4|Q_ASYM)
+        IO_TYPE(D_I4|Q_SYM,     D_I4|Q_SYM,     D_I4|Q_SYM)
+
     END_IO_TYPE_DECL(ADD)
-    if(!VALIDATE_OP_IO_TYPES(ADD, self, inputs, self->input.num, outputs, self->output.num)) {
+    if (!VALIDATE_OP_IO_TYPES(ADD, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
                 self->input.num, outputs, self->output.num);
         VSILOGE("Inputs/Outputs data type not support: %s", desc);
@@ -457,9 +596,6 @@ static vsi_bool op_check_sub
     return ret;
 } /* op_check() */
 
-
-
-
 static vsi_bool op_check_div
     (
     vsi_nn_node_t * self,
@@ -469,45 +605,65 @@ static vsi_bool op_check_div
 {
     /* check inputs outputs data type */
     BEGIN_IO_TYPE_DECL(DIVIDE, 2, 1)
-        IO_TYPE(D_BF16,       D_BF16,       D_BF16)
-        IO_TYPE(D_F16,        D_F16,        D_F16)
-        IO_TYPE(D_F16,        D_F16,        D_I16|Q_DFP)
-        IO_TYPE(D_F16,        D_F16,        D_I8|Q_DFP)
-        IO_TYPE(D_F16,        D_F16,        D_U8|Q_ASYM)
-        IO_TYPE(D_F16,        D_I8|Q_DFP,   D_I8|Q_DFP)
-        IO_TYPE(D_F16,        D_I8|Q_DFP,   D_F16)
-        IO_TYPE(D_F16,        D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_F16,        D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_F16,        D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,        D_I16|Q_DFP,  D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_F16,        D_U8|Q_ASYM)
-        IO_TYPE(D_U8|Q_ASYM,  D_F16,        D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_I16|Q_DFP,  D_U8|Q_ASYM)
-        IO_TYPE(D_U8|Q_ASYM,  D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,   D_I8|Q_DFP,   D_I8|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,   D_I8|Q_DFP,   D_F16)
-        IO_TYPE(D_I8|Q_DFP,   D_F16,        D_I8|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,   D_F16,        D_F16)
-        IO_TYPE(D_I16|Q_DFP,  D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_I16,        D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_I16,        D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_I16|Q_DFP,  D_F16)
-        IO_TYPE(D_I16|Q_DFP,  D_F16,        D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_F16,        D_F16)
-        IO_TYPE(D_F32,  D_F32,  D_F32)
-        IO_TYPE(D_F32,  D_F32,  D_F16)
-        IO_TYPE(D_F32,  D_F16,  D_F32)
-        IO_TYPE(D_F32,  D_F16,  D_F16)
-        IO_TYPE(D_F16,  D_F32,  D_F32)
-        IO_TYPE(D_F16,  D_F32,  D_F16)
-        IO_TYPE(D_F16,  D_F16,  D_F32)
-        IO_TYPE(D_I32,  D_I32,  D_I32)
-        IO_TYPE(D_I16,  D_I32,  D_I32)
-        IO_TYPE(D_I32,  D_I16,  D_I32)
+        IO_TYPE(D_BF16,         D_BF16,         D_BF16)
+        IO_TYPE(D_F16,          D_F16,          D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_F16,          D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_I16|Q_DFP,    D_U8|Q_ASYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_DFP,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_F16)
+        IO_TYPE(D_F32,          D_F32,          D_F32)
+        IO_TYPE(D_F32,          D_F32,          D_F16)
+        IO_TYPE(D_F32,          D_F16,          D_F32)
+        IO_TYPE(D_F32,          D_F16,          D_F16)
+        IO_TYPE(D_F16,          D_F32,          D_F32)
+        IO_TYPE(D_F16,          D_F32,          D_F16)
+        IO_TYPE(D_F16,          D_F16,          D_F32)
+        IO_TYPE(D_I32,          D_I32,          D_I32)
+        IO_TYPE(D_I16,          D_I32,          D_I32)
+        IO_TYPE(D_I32,          D_I16,          D_I32)
     END_IO_TYPE_DECL(DIVIDE)
-    if(!VALIDATE_OP_IO_TYPES(DIVIDE, self, inputs, self->input.num, outputs, self->output.num)) {
+    if (!VALIDATE_OP_IO_TYPES(DIVIDE, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
                 self->input.num, outputs, self->output.num);
         VSILOGE("Inputs/Outputs data type not support: %s", desc);
@@ -517,7 +673,6 @@ static vsi_bool op_check_div
 
     return TRUE;
 } /* op_check() */
-
 
 static vsi_bool op_check_mul
     (
@@ -539,22 +694,40 @@ static vsi_bool op_check_mul
         IO_TYPE(D_F16,          D_I8|Q_DFP,     D_F16)
         IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_F16)
         IO_TYPE(D_F16,          D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM,    D_I16|Q_SYM)
         IO_TYPE(D_F16,          D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM,     D_I8|Q_SYM)
         IO_TYPE(D_F16,          D_U8|Q_ASYM,    D_U8|Q_ASYM)
         IO_TYPE(D_I16|Q_DFP,    D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_F16)
         IO_TYPE(D_I8|Q_DFP,     D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_F16)
         IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_F16)
         IO_TYPE(D_I16|Q_DFP,    D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_F16,          D_I16|Q_SYM)
         IO_TYPE(D_I8|Q_DFP,     D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_F16,          D_I8|Q_SYM)
         IO_TYPE(D_U8|Q_ASYM,    D_F16,          D_U8|Q_ASYM)
         IO_TYPE(D_I8|Q_DFP,     D_I16|Q_DFP,    D_I16|Q_DFP)
         IO_TYPE(D_I8|Q_DFP,     D_I16|Q_DFP,    D_I8|Q_DFP)
         IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM,     D_F16)
         IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM,    D_I8|Q_ASYM)
         IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_I16|Q_DFP)
-        IO_TYPE(D_I16,          D_I16|Q_DFP,    D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,    D_I16,          D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_I16|Q_SYM)
         IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM,    D_F16)
         IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_U8|Q_ASYM)
         IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM,    D_F16)
         IO_TYPE(D_U8|Q_ASYM,    D_I16|Q_DFP,    D_U8|Q_ASYM)
@@ -620,8 +793,14 @@ static vsi_bool op_check_mul
         IO_TYPE(D_F32,          D_BF16,         D_BF16)
         IO_TYPE(D_F32,          D_BF16,         F32)
 
+        /* HW 9.1.1 */
+        IO_TYPE(D_U4|Q_ASYM,    D_U4|Q_ASYM,    D_U4|Q_ASYM)
+        IO_TYPE(D_U4|Q_SYM,     D_U4|Q_SYM,     D_U4|Q_SYM)
+        IO_TYPE(D_I4|Q_ASYM,    D_I4|Q_ASYM,    D_I4|Q_ASYM)
+        IO_TYPE(D_I4|Q_SYM,     D_I4|Q_SYM,     D_I4|Q_SYM)
+
     END_IO_TYPE_DECL(MULTIPLY)
-    if(!VALIDATE_OP_IO_TYPES(MULTIPLY, self, inputs, self->input.num, outputs, self->output.num)) {
+    if (!VALIDATE_OP_IO_TYPES(MULTIPLY, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
                 self->input.num, outputs, self->output.num);
         VSILOGE("Inputs/Outputs data type not support: %s", desc);
@@ -656,7 +835,6 @@ DEF_ELEMENT_WISE_OP( SUBTRACT, sub );
 DEF_ELEMENT_WISE_OP( DIVIDE, div );
 DEF_ELEMENT_WISE_OP( MULTIPLY, mul );
 DEF_ELEMENT_WISE_OP( POW, pow );
-
 
 #undef DEF_ELEMENT_WISE_OP
 

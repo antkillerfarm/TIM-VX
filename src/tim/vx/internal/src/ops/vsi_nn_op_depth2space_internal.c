@@ -50,14 +50,15 @@ static vsi_status op_compute
     vsi_status status = VSI_FAILURE;
     vsi_nn_kernel_param_t * param = NULL;
     //int32_t mode = self->nn_param.depth2space_internal.mode;
-    int32_t block_size = self->nn_param.depth2space_internal.block_size;
+    int32_t block_size = 0;
 
     if( NULL == self )
     {
         return VSI_FAILURE;
     }
 
-    param =vsi_nn_kernel_param_create();
+    block_size = self->nn_param.depth2space_internal.block_size;
+    param = vsi_nn_kernel_param_create();
 
     // Add params
     vsi_nn_kernel_param_add_int32( param, "block_size", block_size );
@@ -104,18 +105,32 @@ static vsi_bool op_check
     )
 {
     BEGIN_IO_TYPE_DECL(DEPTH2SPACE_INTERNAL, 1, 1)
-        IO_TYPE(D_F16,  D_U8|Q_ASYM)
-        IO_TYPE(D_F16,  D_I16|Q_DFP)
-        IO_TYPE(D_F16,  D_I8|Q_DFP)
-        IO_TYPE(D_F16,  D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_F16)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_I8|Q_DFP,   D_I8|Q_DFP)
-        IO_TYPE(D_I8|Q_DFP,   D_F16)
-        IO_TYPE(D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_F16)
+        IO_TYPE(D_F16,          D_U8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_DFP)
+        IO_TYPE(D_F16,          D_I16|Q_ASYM)
+        IO_TYPE(D_F16,          D_I16|Q_SYM)
+        IO_TYPE(D_F16,          D_I8|Q_DFP)
+        IO_TYPE(D_F16,          D_I8|Q_ASYM)
+        IO_TYPE(D_F16,          D_I8|Q_SYM)
+        IO_TYPE(D_F16,          D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_F16)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I8|Q_DFP,     D_F16)
+        IO_TYPE(D_I8|Q_ASYM,    D_F16)
+        IO_TYPE(D_I8|Q_SYM,     D_F16)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_I16|Q_DFP,    D_F16)
+        IO_TYPE(D_I16|Q_ASYM,   D_F16)
+        IO_TYPE(D_I16|Q_SYM,    D_F16)
+        IO_TYPE(D_BF16,         D_BF16)
+        IO_TYPE(D_F32,          D_F32)
     END_IO_TYPE_DECL(DEPTH2SPACE_INTERNAL)
-    if(!VALIDATE_OP_IO_TYPES(DEPTH2SPACE_INTERNAL, self, inputs, self->input.num, outputs, self->output.num)) {
+    if (!VALIDATE_OP_IO_TYPES(DEPTH2SPACE_INTERNAL, self, inputs, self->input.num, outputs, self->output.num)) {
         char* desc = generate_op_io_types_desc(inputs,
                 self->input.num, outputs, self->output.num);
         VSILOGE("Inputs/Outputs data type not support: %s", desc);

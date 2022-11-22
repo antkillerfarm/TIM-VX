@@ -329,6 +329,23 @@ uint32_t vsi_nn_TypeGetBytes
     return type_get_bytes( type );
 } /* vsi_nn_TypeGetBytes() */
 
+uint32_t vsi_nn_TypeGetBytesExt
+    (
+    const vsi_nn_type_e type
+    )
+{
+    uint32_t bits_num = 0;
+    bits_num = vsi_nn_TypeGetBits(type);
+    if(bits_num < BITS_PER_BYTE)
+    {
+        return 1;
+    }
+    else
+    {
+        return bits_num / BITS_PER_BYTE;
+    }
+}
+
 /*
 * Deprecated: use vsi_nn_TypeGetBytes() insteatd.
 */
@@ -339,6 +356,14 @@ uint32_t vsi_nn_GetTypeBytes
 {
     return type_get_bytes( type );
 } /* vsi_nn_GetTypeBytes() */
+
+uint32_t vsi_nn_TypeGetBits
+    (
+    const vsi_nn_type_e type
+    )
+{
+    return type_get_bits(type);
+} /* vsi_nn_GetTypeBits() */
 
 vsi_bool vsi_nn_QuantCheck
     (
@@ -386,6 +411,7 @@ vsi_bool vsi_nn_QuantCheck
                 bias->attr.dtype.fl);
         }
         break;
+    case VSI_NN_QNT_TYPE_AFFINE_SYMMETRIC:
     case VSI_NN_QNT_TYPE_AFFINE_ASYMMETRIC:
     if (weight->attr.dtype.qnt_type == VSI_NN_QNT_TYPE_AFFINE_PERCHANNEL_SYMMETRIC)
     {
@@ -421,33 +447,66 @@ vsi_bool vsi_nn_DtypeCompare
     vsi_nn_dtype_t *dtype1
     )
 {
-    if(NULL == dtype0 || NULL == dtype1)
+    if (NULL == dtype0 || NULL == dtype1)
     {
         return FALSE;
     }
 
-    if(dtype0->vx_type != dtype1->vx_type || dtype0->qnt_type != dtype1->qnt_type)
+    if ( dtype0->vx_type != dtype1->vx_type ||
+         dtype0->qnt_type != dtype1->qnt_type )
     {
         return FALSE;
     }
-    if(dtype0->qnt_type == VSI_NN_QNT_TYPE_DFP)
+
+    switch (dtype0->qnt_type)
     {
-        if(dtype0->fl != dtype1->fl)
+        case VSI_NN_QNT_TYPE_DFP:
+            if (dtype0->fl != dtype1->fl)
+            {
+                return FALSE;
+            }
+            break;
+        case VSI_NN_QNT_TYPE_AFFINE_SYMMETRIC:
+        case VSI_NN_QNT_TYPE_AFFINE_ASYMMETRIC:
         {
-            return FALSE;
+            const float diff = (float)1e-5;
+            if (dtype0->zero_point != dtype1->zero_point)
+            {
+                return FALSE;
+            }
+            if (vsi_nn_float_compare(dtype0->scale, dtype1->scale, diff)
+                == FALSE)
+            {
+                return FALSE;
+            }
+
+            break;
         }
-    }
-    else if(dtype0->qnt_type == VSI_NN_QNT_TYPE_AFFINE_ASYMMETRIC)
-    {
-        const float diff = (float)1e-5;
-        if(dtype0->zero_point != dtype1->zero_point)
+        case VSI_NN_QNT_TYPE_AFFINE_PERCHANNEL_SYMMETRIC:
+        case VSI_NN_QNT_TYPE_AFFINE_PERCHANNEL_ASYMMETRIC:
         {
-            return FALSE;
+            const float diff = (float)1e-5;
+            int32_t i = 0;
+            int32_t scale_cnt0 = dtype0->scale_dim;
+            int32_t scale_cnt1 = dtype1->scale_dim;
+
+            if (scale_cnt0 == scale_cnt1)
+            {
+                const float* src_scale_ptr = dtype0->scales;
+                const float* dst_scale_ptr = dtype1->scales;
+                for (i = 0; i < scale_cnt0; i++)
+                {
+                    if (vsi_nn_float_compare(src_scale_ptr[i],dst_scale_ptr[i], diff)
+                        == FALSE)
+                    {
+                        return FALSE;
+                    }
+                }
+            }
+            break;
         }
-        if(vsi_nn_float_compare(dtype0->scale, dtype1->scale, diff) == FALSE)
-        {
-            return FALSE;
-        }
+        default:
+            break;
     }
 
     return TRUE;

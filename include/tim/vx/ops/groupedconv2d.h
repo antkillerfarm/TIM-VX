@@ -26,7 +26,7 @@
 
 #include <array>
 
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -53,7 +53,7 @@ namespace ops {
  * - layout : WHCN or CWHN.
  */
 
-class GroupedConv2d : public Operation {
+class GroupedConv2d : public BuiltinOp {
  public:
   GroupedConv2d(Graph* graph, PadType padding,
          const std::array<uint32_t, 2>& strides,

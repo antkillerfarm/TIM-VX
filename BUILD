@@ -28,10 +28,13 @@ cc_library(
     ],
     hdrs = [
         "include/tim/vx/context.h",
+        "include/tim/vx/builtin_op.h",
         "include/tim/vx/graph.h",
         "include/tim/vx/operation.h",
+        "include/tim/vx/ops.h",
         "include/tim/vx/tensor.h",
         "include/tim/vx/types.h",
+        "include/tim/vx/compile_option.h",
         "include/tim/transform/layout_inference.h",
     ] + glob([
         "include/tim/vx/ops/*.h"
@@ -39,10 +42,15 @@ cc_library(
     srcs = [
         "src/tim/vx/context_private.h",
         "src/tim/vx/context.cc",
+        "src/tim/vx/compile_option.cc",
         "src/tim/vx/graph_private.h",
         "src/tim/vx/graph.cc",
+        "src/tim/vx/builtin_op_impl.cc",
+        "src/tim/vx/builtin_op.cc",
+        "src/tim/vx/builtin_op_impl.h",
+        "src/tim/vx/op_impl.cc",
+        "src/tim/vx/op_impl.h",
         "src/tim/vx/operation.cc",
-        "src/tim/vx/operation_private.h",
         "src/tim/vx/tensor.cc",
         "src/tim/vx/tensor_private.h",
         "src/tim/vx/type_utils.h",

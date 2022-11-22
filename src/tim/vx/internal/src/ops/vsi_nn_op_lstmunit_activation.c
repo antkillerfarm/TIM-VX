@@ -35,7 +35,7 @@
 #include "vsi_nn_ops.h"
 #include "vsi_nn_tensor.h"
 #include "vsi_nn_tensor_util.h"
-#include "libnnext/vsi_nn_vxkernel.h"
+#include "vsi_nn_error.h"
 #include "kernel/vsi_nn_kernel.h"
 #include "utils/vsi_nn_util.h"
 
@@ -98,7 +98,6 @@ static vsi_status op_compute
     }
 
     return status;
-
 } /* op_compute() */
 
 static vsi_bool op_check
@@ -124,10 +123,11 @@ static vsi_bool op_setup
     int32_t ifco_start_index = 0;
     vsi_nn_tensor_attr_t attr;
     int32_t i = 0;
+    vsi_bool ret = FALSE;
 
     memset(&attr, 0, sizeof(vsi_nn_tensor_attr_t));
 
-    if( NULL == self )
+    if ( NULL == self )
     {
         return FALSE;
     }
@@ -136,7 +136,14 @@ static vsi_bool op_setup
 
     p->is_cifg = inputs[LSTMUNIT_ACT_INPUT_FC_I] == NULL;
     p->is_projection = outputs[LSTMUNIT_ACT_HSTATE_OUT] == NULL;
-    p->is_layer_norm = inputs[LSTMUNIT_ACT_LN_WF] != NULL;
+    if (self->graph->ctx->config.support_stream_processor)
+    {
+        p->is_layer_norm = inputs[LSTMUNIT_ACT_HSTATE_FC_F] == NULL;
+    }
+    else
+    {
+        p->is_layer_norm = inputs[LSTMUNIT_ACT_LN_WF] != NULL;
+    }
     p->is_hybrid = p->is_layer_norm ? 0 : inputs[LSTMUNIT_ACT_DATA_BF] != NULL;
     p->recurrent_activation = p->recurrent_activation == VSI_NN_ACT_NONE ?
         VSI_NN_ACT_SIGMOID : p->recurrent_activation;
@@ -154,13 +161,15 @@ static vsi_bool op_setup
             attr.size[1] = 1;
             attr.dim_num = 2;
             t0 = vsi_nn_reshape_tensor(self->graph, inputs[LSTMUNIT_ACT_DATA_BI + i], attr.size, attr.dim_num);
+            CHECK_PTR_FAIL_GOTO( t0, "create tensor fail.", final );
 
-            if( dst_dtype.vx_type != t0->attr.dtype.vx_type
+            if ( dst_dtype.vx_type != t0->attr.dtype.vx_type
                 && dst_dtype.qnt_type != t0->attr.dtype.qnt_type )
             {
                 p->local.tensors[LSTMUNIT_ACT_TENSOR_BI + i] =
                     vsi_nn_ConvertTensorDtype( self->graph, t0, &dst_dtype );
-                vsi_nn_ReleaseTensor( &t0 );
+
+                vsi_safe_release_tensor(t0);
             }
             else
             {
@@ -176,13 +185,14 @@ static vsi_bool op_setup
             attr.size[1] = 1;
             attr.dim_num = 2;
             t1 = vsi_nn_reshape_tensor(self->graph, inputs[LSTMUNIT_ACT_LN_WI + i], attr.size, attr.dim_num);
+            CHECK_PTR_FAIL_GOTO( t1, "create tensor fail.", final );
 
-            if( dst_dtype.vx_type != t1->attr.dtype.vx_type
+            if ( dst_dtype.vx_type != t1->attr.dtype.vx_type
                 && dst_dtype.qnt_type != t1->attr.dtype.qnt_type )
             {
                 p->local.tensors[LSTMUNIT_ACT_TENSOR_LN_WI + i] =
                     vsi_nn_ConvertTensorDtype( self->graph, t1, &dst_dtype );
-                vsi_nn_ReleaseTensor( &t1 );
+                vsi_safe_release_tensor(t1);
             }
             else
             {
@@ -220,8 +230,9 @@ static vsi_bool op_setup
         outputs[LSTMUNIT_ACT_HSTATE_OUT]->attr.size[3] = outputs[LSTMUNIT_ACT_OUTPUT]->attr.size[3];
     }
 
-    return TRUE;
-
+    ret = TRUE;
+final:
+    return ret;
 } /* op_setup() */
 
 static vsi_status op_deinit
@@ -229,7 +240,6 @@ static vsi_status op_deinit
     vsi_nn_node_t * self
     )
 {
-
     vsi_status status = VSI_SUCCESS;
     int32_t i = 0;
 
@@ -249,7 +259,6 @@ static vsi_status op_deinit
     }
 
     return status;
-
 } /* op_deinit() */
 
 static vsi_status op_init
@@ -257,13 +266,11 @@ static vsi_status op_init
     vsi_nn_node_t * self
     )
 {
-
     vsi_status status = VSI_SUCCESS;
 
     self->nn_param.lstmunit_activation.recurrent_activation = VSI_NN_ACT_SIGMOID;
 
     return status;
-
 } /* op_init() */
 
 #ifdef __cpluplus

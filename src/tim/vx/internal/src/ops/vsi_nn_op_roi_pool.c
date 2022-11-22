@@ -31,6 +31,7 @@
 #include "vsi_nn_ops.h"
 #include "vsi_nn_tensor.h"
 #include "vsi_nn_log.h"
+#include "vsi_nn_tensor_util.h"
 #include "utils/vsi_nn_util.h"
 #include "utils/vsi_nn_constraint_check.h"
 
@@ -100,6 +101,7 @@ static vsi_bool op_check
         IO_TYPE(D_F32,  D_F32, D_F16)
         IO_TYPE(D_F32,  D_F32, D_F32)
         IO_TYPE(D_BF16, D_BF16, D_F32)
+        IO_TYPE(D_BF16, D_BF16, D_BF16)
         IO_TYPE(D_F32,  D_F32,  D_BF16)
 
         /* HW 9.0 */
@@ -170,19 +172,7 @@ static vsi_status op_optimize
         {
             size[2] = inputs[1]->attr.size[0];
             size[3] = inputs[1]->attr.size[1];
-#ifdef VSI_40BIT_VA_SUPPORT
-            rois_tmp = vxReshapeTensor(inputs[1]->t, size, dim);
-#else
-            {
-                vsi_size_t i;
-                int32_t size_32bit[VSI_NN_MAX_DIM_NUM];
-                for(i = 0; i < VSI_NN_MAX_DIM_NUM; i++)
-                {
-                    size_32bit[i] = (int32_t)size[i];
-                }
-                rois_tmp = vxReshapeTensor(inputs[1]->t, size_32bit, dim);
-            }
-#endif
+            rois_tmp = vsi_nn_safe_reshape_tensor(inputs[1]->t, (void*)size, (vsi_size_t)dim, sizeof(size[0]));
             if(NULL == rois_tmp)
             {
                 return VSI_FAILURE;
@@ -199,9 +189,10 @@ static vsi_status op_deinit
     vsi_nn_node_t * self
     )
 {
-    vx_tensor rois = self->nn_param.roi_pool.local.rois;
-    if( NULL != self && NULL != self->n )
+    vx_tensor rois = NULL;
+    if ( NULL != self && NULL != self->n )
     {
+        rois = self->nn_param.roi_pool.local.rois;
         if(rois)
         {
             vxReleaseTensor(&rois);

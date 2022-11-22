@@ -23,7 +23,7 @@
 *****************************************************************************/
 #ifndef TIM_VX_OPS_RESHAPE_H_
 #define TIM_VX_OPS_RESHAPE_H_
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -37,14 +37,11 @@ namespace ops {
  * - size : defining the shape of the output tensor.
  */
 
-class Reshape : public Operation {
+class Reshape : public Operation{
  public:
-  Reshape(Graph* graph, const std::vector<uint32_t>& size);
+  Reshape(Graph* graph, const std::vector<uint32_t>& target_shape);
 
   std::shared_ptr<Operation> Clone(std::shared_ptr<Graph>& graph) const override;
-
- protected:
-  std::vector<uint32_t> size_;
 };
 
 }  // namespace ops

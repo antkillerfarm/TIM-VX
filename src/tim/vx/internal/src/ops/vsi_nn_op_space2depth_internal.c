@@ -49,15 +49,17 @@ static vsi_status op_compute
 {
     vsi_status status = VSI_FAILURE;
     vsi_nn_kernel_param_t * param = NULL;
-    int32_t block_size_x = self->nn_param.space2depth_internal.block_size_x;
-    int32_t block_size_y = self->nn_param.space2depth_internal.block_size_y;
+    int32_t block_size_x = 0;
+    int32_t block_size_y = 0;
 
     if ( NULL == self )
     {
         return VSI_FAILURE;
     }
 
-    param =vsi_nn_kernel_param_create();
+    block_size_x = self->nn_param.space2depth_internal.block_size_x;
+    block_size_y = self->nn_param.space2depth_internal.block_size_y;
+    param = vsi_nn_kernel_param_create();
 
     // Add params
     vsi_nn_kernel_param_add_int32( param, "block_size_x", block_size_x );
@@ -106,13 +108,17 @@ static vsi_bool op_check
     )
 {
     BEGIN_IO_TYPE_DECL(SPACE2DEPTH_INTERNAL, 1, 1)
-        IO_TYPE(D_F16,  D_F16)
-        IO_TYPE(D_I8|Q_DFP,  D_I8|Q_DFP)
-        IO_TYPE(D_I16|Q_DFP,  D_I16|Q_DFP)
-        IO_TYPE(D_U8|Q_ASYM,  D_U8|Q_ASYM)
-        IO_TYPE(D_F32,  D_F32)
-        IO_TYPE(D_F32,  D_BF16)
-        IO_TYPE(D_BF16, D_F32)
+        IO_TYPE(D_F16,          D_F16)
+        IO_TYPE(D_I8|Q_DFP,     D_I8|Q_DFP)
+        IO_TYPE(D_I8|Q_ASYM,    D_I8|Q_ASYM)
+        IO_TYPE(D_I8|Q_SYM,     D_I8|Q_SYM)
+        IO_TYPE(D_I16|Q_DFP,    D_I16|Q_DFP)
+        IO_TYPE(D_I16|Q_ASYM,   D_I16|Q_ASYM)
+        IO_TYPE(D_I16|Q_SYM,    D_I16|Q_SYM)
+        IO_TYPE(D_U8|Q_ASYM,    D_U8|Q_ASYM)
+        IO_TYPE(D_F32,          D_F32)
+        IO_TYPE(D_F32,          D_BF16)
+        IO_TYPE(D_BF16,         D_F32)
 
         /* HW 9.0 */
         IO_TYPE(D_BF16, D_BF16)

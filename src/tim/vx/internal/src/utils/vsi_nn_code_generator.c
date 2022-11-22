@@ -54,7 +54,7 @@ static void _try_open_file
         VSILOGW( "File handle is not NULL." );
         fclose( *fp );
     }
-    *fp = fopen( file_path, mode );
+    *fp = vsi_nn_fopen( file_path, mode );
     if( NULL == *fp )
     {
         VSILOGE( "Open file %s fail.", file_path );
@@ -111,7 +111,7 @@ static void _try_pack_tensor_data
             cnt = fwrite( data, (size_t)bytes, 1, s_dfile_hndl );
             if( cnt != 1 )
             {
-                VSILOGW( "Write tensor bytes(%"VSI_SIZE_T_SPECIFIER"/%d)", (vsi_size_t)cnt, 1 );
+                VSILOGW( "Write tensor bytes(%"SIZE_T_SPECIFIER"/%d)", cnt, 1 );
             }
             if( cnt > 0 )
             {
@@ -435,6 +435,26 @@ static _op_param_gen_t s_op_gen[] =
     /* GRU */                   NULL,
     /* GRUCELL */               NULL,
     /* GRUCELL_ACTIVATION */    NULL,
+    /* RESHAPE2 */              NULL,
+    /* CONV3D */                NULL,
+    /* DECONV3D */              NULL,
+    /* PAD2 */                  NULL,
+    /* COS */                   NULL,
+    /* PRE_PROCESS_RGB888_PLANAR */ NULL,
+    /* GATHER_ELEMENTS */       NULL,
+    /* SELU */                  NULL,
+    /* CELU */                  NULL,
+    /* MAX_POOL3D */            NULL,
+    /* RCP */                   NULL,
+    /* SIGN */                  NULL,
+    /* SOFTSIGN */              NULL,
+    /* CUMSUM */                NULL,
+    /* MAXPOOLWITHARGMAX */     NULL,
+    /* MOD */                   NULL,
+    /* LPPOOL */                NULL,
+    /* SCATTER_ELEMENTS */      NULL,
+    /* PRE_PROCESS_YUV422 */    NULL,
+    /* BUCKETIZE */             NULL,
 };
 _compiler_assert( _cnt_of_array(s_op_gen) == VSI_NN_OP_NUM, vsi_nn_code_generator_c );
 
@@ -555,4 +575,3 @@ void vsi_nn_GenGraphCCode
     _try_close_file( &s_dfile_hndl );
     _try_close_file( &s_net_file_hndl );
 } /* vsi_nn_GenGraphCCode() */
-

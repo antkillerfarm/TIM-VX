@@ -26,7 +26,7 @@
 
 #include <array>
 
-#include "tim/vx/operation.h"
+#include "tim/vx/builtin_op.h"
 
 namespace tim {
 namespace vx {
@@ -55,7 +55,7 @@ namespace ops {
  * - layout : WHCN or CWHN.
  */
 
-class Conv2d : public Operation {
+class Conv2d : public BuiltinOp {
  public:
   Conv2d(Graph* graph, PadType padding,
          const std::array<uint32_t, 2>& stride,
@@ -85,6 +85,7 @@ class Conv2d : public Operation {
 
   std::shared_ptr<Operation> Clone(std::shared_ptr<Graph>& graph) const override;
 
+  const std::vector<std::shared_ptr<Tensor>> ConstantInputsTensor() const override;
  protected:
   const uint32_t weights_;
   const PadType padding_;
